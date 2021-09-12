@@ -1,13 +1,18 @@
+
+# For loading the config
+import yaml
+
 # For scraping the data
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 import time
+from tqdm.auto import tqdm
 
 # For storing the data
 import json
 
 # Read in config of my chromedriver location
-with open("configs/configs.yaml", "r") as config:
+with open("configs/config.yaml", "r") as config:
     c = yaml.load(config, Loader=yaml.FullLoader)
 chromedriver_location = c["chromedriver_location"]
 
@@ -35,7 +40,7 @@ def update_company_tickers():
     ticker_to_company_map = {}
 
     # iterate through each page
-    for _ in tqdm(range(num_pages)):
+    for pg_num in tqdm(range(num_pages)):
         # iteratively scrape each ticker and company name
         num_tickers_on_page = len(driver.find_elements(By.XPATH, "/html/body/div/div/main/div/div/div[2]/table/tbody/tr"))
         for i in tqdm(range(1, num_tickers_on_page), leave=False):
@@ -43,10 +48,11 @@ def update_company_tickers():
             company_name = driver.find_element(By.XPATH, '/html/body/div/div/main/div/div/div[2]/table/tbody/tr[{}]/td[2]'.format(i)).text
             ticker_to_company_map[ticker] = company_name
 
-        # Change to the next page
-        next_page_button = driver.find_element(By.XPATH, '/html/body/div/div/main/div/div/nav/button[2]')
-        next_page_button.click()
+        if pg_num != num_pages - 1:
+            # Change to the next page
+            next_page_button = driver.find_element(By.XPATH, '/html/body/div/div/main/div/div/nav/button[2]')
+            next_page_button.click()
 
     # store this scraped data as json file
-    with open('ticker_to_name.json', 'w') as file:
+    with open('data/ticker_to_name.json', 'w') as file:
         json.dump(ticker_to_company_map, file)
