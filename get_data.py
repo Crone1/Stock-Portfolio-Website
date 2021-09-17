@@ -1,12 +1,22 @@
 
+# general packages
+from tqdm.auto import tqdm
+import pandas as pd
+
 # For loading the config
 import yaml
 
-# For scraping the data
+# For scraping the ticker data
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 import time
-from tqdm.auto import tqdm
+
+# For querying Yahoo Finance
+import yfinance as yf
+
+# For getting currency exchange rates
+import requests
+from datetime import datetime, timedelta
 
 # For storing the data
 import json
@@ -17,7 +27,32 @@ with open("configs/config.yaml", "r") as config:
 chromedriver_location = c["chromedriver_location"]
 
 
-def update_company_tickers():
+
+def read_in_transactions_data():
+    """
+    """
+    # Read in the transactions table
+    transactions = pd.read_csv("data/transactions.csv")
+
+    # Ensure the date column is a datetime oject
+    transactions['date'] = pd.to_datetime(transactions['date'])
+
+    # Ensure the table is sorted by ticker and then by date
+    transactions.sort_values(["stock_ticker", "date"], inplace=True, ignore_index=True)
+
+    # Create a company name column using the stock ticker
+    with open('data/stock_ticker_to_name.json', 'r') as file:
+        comp_name_map = json.load(file)
+        transactions["company_name"] = [comp_name_map[ticker] if ticker in comp_name_map else None for ticker in transactions["stock_ticker"]]
+
+    # Create an exchange name and a currency column using the exchange ticker
+    exch_tab = pd.read_csv('data/exchange_name_and_currency.csv')
+    transactions = transactions.merge(exch_tab, how='left', on="exchange_ticker")
+
+    return transactions
+
+
+def create_company_ticker_to_name_map():
     """
 	Scrape the Stock Analysis website to create a map from the ticker names of thousands of stocks to their respective company names
 
@@ -56,3 +91,66 @@ def update_company_tickers():
     # store this scraped data as json file
     with open('data/ticker_to_name.json', 'w') as file:
         json.dump(ticker_to_company_map, file)
+
+
+def create_table_of_historic_stock_prices(ticker_list, start_date_list):
+
+    stock_prices_df = pd.DataFrame()
+    stock_dividend_df = pd.DataFrame()
+    for ticker, start_date in zip(ticker_list, start_date_list):
+        
+        try:
+            # get the close price & dividend info for each ticker
+            ticker_yf_object = yf.Ticker(ticker)
+            ticker_hist = ticker_yf_object.history(start=start_date)
+            price_df = ticker_hist[["Close"]].rename(columns={"Close": ticker})
+            price_df.index.rename("date", inplace=True)
+            dividend_df = ticker_hist[["Dividends"]].rename(columns={"Dividends": ticker})
+            dividend_df.index.rename("date", inplace=True)
+
+            # add this price & dividend data to a dataframe for all tickers
+            stock_prices_df = pd.concat([stock_prices_df, price_df], join="outer", axis=1)
+            stock_dividend_df = pd.concat([stock_dividend_df, dividend_df], join="outer", axis=1)
+
+        except:
+            print(ticker, "not found")
+
+    # store this data as a CSV
+    stock_prices_df.to_csv("data/stock_price_data.csv", index=True)
+    stock_dividend_df.to_csv("data/stock_dividend_data.csv", index=True)
+
+
+def create_exchange_rate_to_date_map(base_currency, exchange_currency_list, start_date):
+
+    # Define the main variables needed to scrape the exchange rates
+    base_url = 'https://api.exchangerate.host/timeseries?'
+    target_currecies = ','.join(exchange_currency_list)
+    end_date = datetime.now().date()
+    currency_rates_df = pd.DataFrame()
+
+    while True:
+        # define the URL to query
+        query = base_url + f'start_date={start_date}&end_date={end_date}&base={base_currency}&symbols={target_currecies}'
+
+        # Query the URL for the currency data
+        url_response = requests.get(query).json()
+
+        # Store the currency exchange rates in a dataframe
+        if url_response["success"]:
+            response_df = pd.DataFrame(url_response["rates"]).T
+            response_df.index = pd.to_datetime(response_df.index)
+            currency_rates_df = pd.concat([currency_rates_df, response_df], axis=0)
+        else:
+            print("ERROR when scraping exchange rates:\n", url_response)
+
+        # Exit the loop if the last day scraped is the same as the specified end_date
+        last_date_scraped = max(currency_rates_df.index)
+        if last_date_scraped == end_date:
+            break
+        else:
+            start_date = last_date_scraped + timedelta(days=1)
+
+    # store this data as a CSV
+    currency_rates_df.index.rename("date", inplace=True)
+    currency_rates_df.to_csv("data/{}_currency_exchange_data.csv".format(base_currency), index=True)
+
