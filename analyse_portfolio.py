@@ -127,3 +127,30 @@ def create_valuation_table(df, selected_period, base_currency):
         valuation_date += selected_period
 
     return valuation_df
+
+
+def calculate_daily_account_balance(transactions_df):
+
+    # read in the table of when money was deposited and create a table showing the balance changes
+    deposites_df = pd.read_csv("data/deposites.csv", index_col="date")
+    balance_changes_df = deposites_df["amount"].cumsum()
+
+    # create a dataframe with a row for each day
+    daily_rows_df = pd.DataFrame({"date": pd.date_range(balance_changes_df.index.min(), datetime.now().date(), freq='D')}).set_index("date")
+
+    # expand out our balance dataframe to have a row for each day
+    daily_balance_df = pd.merge(daily_rows_df, balance_changes_df, how="left", left_index=True, right_index=True).ffill(axis=0)
+
+    return daily_balance_df.reset_index()
+
+
+def calculate_debit_money(daily_account_balance_df, transactions_df):
+
+    # create a dataframe with a row for each day
+    daily_rows_df = pd.DataFrame({"date": pd.date_range(transactions_df["date"].min(), datetime.now().date(), freq='D')}).set_index("date")
+
+    # expand out our balance dataframe to have a row for each day
+    daily_transactions_cost_df = pd.merge(daily_rows_df, transactions_df.set_index("date"), how="left", left_index=True, right_index=True).ffill(axis=0)
+
+    daily_transactions_cost_df["share_cost_in_euro"]
+
