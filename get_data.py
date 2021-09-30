@@ -28,28 +28,52 @@ chromedriver_location = c["chromedriver_location"]
 
 
 
-def read_in_transactions_data():
-    """
-    """
+def read_in_raw_transactions_data():
+
     # Read in the transactions table
     transactions = pd.read_csv("data/transactions.csv")
 
     # Ensure the date column is a datetime oject
     transactions['date'] = pd.to_datetime(transactions['date'])
 
-    # Ensure the table is sorted by ticker and then by date
-    transactions.sort_values(["stock_ticker", "date"], inplace=True, ignore_index=True)
+    return transactions
 
-    # Create a company name column using the stock ticker
+
+def create_company_name_col_using_ticker(df):
+
+    # if the company_name column already exists then drop it
+    df.drop(columns=["company_name"], inplace=True, errors="ignore")
+
+    # Add a company name column to the datafram using the defined json file
     with open('data/stock_ticker_to_name.json', 'r') as file:
         comp_name_map = json.load(file)
-        transactions["company_name"] = [comp_name_map[ticker] if ticker in comp_name_map else None for ticker in transactions["stock_ticker"]]
+        df["company_name"] = [comp_name_map[ticker] if ticker in comp_name_map else "" for ticker in df["stock_ticker"]]
 
-    # Create an exchange name and a currency column using the exchange ticker
+    # Check if any rows didn't have an associated company name in thie json file
+    rows_with_no_company_name = df[df["company_name"] == ""]
+    if len(rows_with_no_company_name) > 0:
+        print("The following stocks did not have an associated company name:")
+        print(rows_with_no_company_name[["stock_ticker", "exchange_ticker"]].drop_duplicates().to_markdown())
+
+    return df
+
+
+def create_exchange_name_nd_curency_cols_using_ticker(df):
+
+    # if the exchange_name column already exists then drop it
+    df.drop(columns=["exchange_name", "currency"], inplace=True, errors="ignore")
+
+    # Add an exchange name column to the datafram using the defined CSV
     exch_tab = pd.read_csv('data/exchange_name_and_currency.csv')
-    transactions = transactions.merge(exch_tab, how='left', on="exchange_ticker")
+    df_with_name = df.merge(exch_tab, how='left', on="exchange_ticker")
 
-    return transactions
+    # Check if any rows didn't have an associated exchange name in thie CSV
+    rows_with_no_exchange_name = df_with_name[df_with_name["exchange_name"] == None]
+    if len(rows_with_no_exchange_name) > 0:
+        print("The following rows did not have an associated exchange name:")
+        print(rows_with_no_exchange_name.to_markdown())
+
+    return df_with_name
 
 
 def create_company_ticker_to_name_map():
