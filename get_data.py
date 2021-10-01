@@ -72,7 +72,7 @@ def create_company_ticker_to_name_map():
 def create_exchange_ticker_to_name_map():
     pass
 
-    
+
 def read_in_raw_transactions_data():
 
     # Read in the transactions table
@@ -136,11 +136,11 @@ def add_columns_to_data(df):#, exchange_currencies):
     #if exchange_currencies_currencies["exchange_ticker"] = "USD":
     #    p_curr = "$"
     
-    df["share_cost_in_$"] = df["num_shares"] * df["share_price"]
-    df["currency_exchange_fee"] = [abs(v) for v in df["share_cost_in_$"] * 0.001]/df["exchange_rate"]
+    df["share_cost_in_local_currency$"] = df["num_shares"] * df["share_price"]
+    df["currency_exchange_fee"] = [abs(v) for v in df["share_cost_in_local_currency"] * 0.001]/df["exchange_rate"]
     df["fixed_transaction_fee"] = 0.5
     df["variable_transaction_fee"] = round(((0.004/df["exchange_rate"]) *abs(df["num_shares"])), 2)
-    df["total_outgoing_in_eur"] = (df["share_cost_in_$"]/df["exchange_rate"]) + df["fixed_transaction_fee"] + df["variable_transaction_fee"]
+    df["total_outgoing_in_eur"] = (df["share_cost_in_local_currency$"]/df["exchange_rate"]) + df["fixed_transaction_fee"] + df["variable_transaction_fee"]
     df["share_cost_in_eur"] = df["total_outgoing_in_eur"]-  df["fixed_transaction_fee"] - df["variable_transaction_fee"] - df["currency_exchange_fee"]
 
     return df
@@ -248,4 +248,45 @@ def create_exchange_rate_to_date_map(base_currency, exchange_currency_list, star
     # store this data as a CSV
     currency_rates_df.index.rename("date", inplace=True)
     currency_rates_df.to_csv("data/{}_currency_exchange_data.csv".format(base_currency), index=True)
+
+
+def calculate_amount_in_cumulative_account_each_day():
+
+    # read in the table of when money was deposited and create a table showing the balance changes
+    deposites_df = pd.read_csv("data/deposites.csv", index_col="date")
+    balance_changes_df = deposites_df["amount"].cumsum()
+
+    # ensure there is only one value for each day
+    balance_changes_df = balance_changes_df.reset_index().drop_duplicates(subset="date", keep="last").set_index("date")
+
+    # ensure the date index is stored as a date
+    balance_changes_df.index = pd.to_datetime(balance_changes_df.index)
+
+    # create a dataframe with a row for each day
+    daily_rows_df = pd.DataFrame({"date": pd.date_range(balance_changes_df.index.min(), datetime.now().date(), freq='D')}).set_index("date")
+
+    # expand out our balance dataframe to have a row for each day
+    daily_balance_df = pd.merge(daily_rows_df, balance_changes_df, how="left", left_index=True, right_index=True).ffill(axis=0)
+
+    return daily_balance_df
+
+
+def calculate_cumulative_amount_spent_each_day(transactions_df):
+
+    # Subset the columns to get the amount spent and the date
+    transaction_cost_df = transactions_df[["date", "total_outgoing_in_eur"]]
+
+    # group the dta by the date and sum the values for each date
+    total_spent_df = transaction_cost_df.groupby(by="date").sum().rename(columns={"total_outgoing_in_eur": "amount"})
+
+    # create a cumulative amount spent
+    cumulative_total_spent_df = total_spent_df["amount"].cumsum()
+
+    # create a dataframe with a row for each day
+    daily_rows_df = pd.DataFrame({"date": pd.date_range(cumulative_total_spent_df.index.min(), datetime.now().date(), freq='D')}).set_index("date")
+
+    # expand out our daily spend dataframe to have a row for each day
+    daily_spend_df = pd.merge(daily_rows_df, cumulative_total_spent_df, how="left", left_index=True, right_index=True).ffill(axis=0)
+
+    return daily_spend_df
 
