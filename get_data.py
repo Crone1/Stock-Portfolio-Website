@@ -28,6 +28,51 @@ chromedriver_location = c["chromedriver_location"]
 
 
 
+def create_company_ticker_to_name_map():
+    """
+	Scrape the Stock Analysis website to create a map from the ticker names of thousands of stocks to their respective company names
+
+	Exports this data to a Json file for further use
+    """
+
+    # define the website URl
+    url = 'https://stockanalysis.com/stocks/'
+
+    # open the browser
+    driver = webdriver.Chrome(chromedriver_location)
+    driver.get(url)
+    time.sleep(2)
+
+    # check how many pages there are
+    pages_text = driver.find_element(By.XPATH, '/html/body/div/div/main/div/div/nav/div/span').text
+    num_pages = int(pages_text.split(" ")[-1])
+
+    # define a dictionary to store the scraped data
+    ticker_to_company_map = {}
+
+    # iterate through each page
+    for pg_num in tqdm(range(num_pages)):
+        # iteratively scrape each ticker and company name
+        num_tickers_on_page = len(driver.find_elements(By.XPATH, "/html/body/div/div/main/div/div/div[2]/table/tbody/tr"))
+        for i in tqdm(range(1, num_tickers_on_page), leave=False):
+            ticker = driver.find_element(By.XPATH, '/html/body/div/div/main/div/div/div[2]/table/tbody/tr[{}]/td[1]/a'.format(i)).text
+            company_name = driver.find_element(By.XPATH, '/html/body/div/div/main/div/div/div[2]/table/tbody/tr[{}]/td[2]'.format(i)).text
+            ticker_to_company_map[ticker] = company_name
+
+        if pg_num != num_pages - 1:
+            # Change to the next page
+            next_page_button = driver.find_element(By.XPATH, '/html/body/div/div/main/div/div/nav/button[2]')
+            next_page_button.click()
+
+    # store this scraped data as json file
+    with open('data/ticker_to_name.json', 'w') as file:
+        json.dump(ticker_to_company_map, file)
+
+
+def create_exchange_ticker_to_name_map():
+    pass
+
+    
 def read_in_raw_transactions_data():
 
     # Read in the transactions table
@@ -76,45 +121,71 @@ def create_exchange_name_nd_curency_cols_using_ticker(df):
     return df_with_name
 
 
-def create_company_ticker_to_name_map():
+def get_specific_stock(all_data, stock_ticker, exchange_ticker):
     """
-	Scrape the Stock Analysis website to create a map from the ticker names of thousands of stocks to their respective company names
+    Extract from the dataframe only the data which are associated with the given ticker
 
-	Exports this data to a Json file for further use
+    Returns:
+        Pandas Dataframe
     """
 
-    # define the website URl
-    url = 'https://stockanalysis.com/stocks/'
+    return all_data[(all_data["stock_ticker"] == stock_ticker) & (all_data["exchange_ticker"] == exchange_ticker)].reset_index(drop=True)
 
-    # open the browser
-    driver = webdriver.Chrome(chromedriver_location)
-    driver.get(url)
-    time.sleep(2)
 
-    # check how many pages there are
-    pages_text = driver.find_element(By.XPATH, '/html/body/div/div/main/div/div/nav/div/span').text
-    num_pages = int(pages_text.split(" ")[-1])
+def add_columns_to_data(df):#, exchange_currencies):
+    #if exchange_currencies_currencies["exchange_ticker"] = "USD":
+    #    p_curr = "$"
+    
+    df["share_cost_in_$"] = df["num_shares"] * df["share_price"]
+    df["currency_exchange_fee"] = [abs(v) for v in df["share_cost_in_$"] * 0.001]/df["exchange_rate"]
+    df["fixed_transaction_fee"] = 0.5
+    df["variable_transaction_fee"] = round(((0.004/df["exchange_rate"]) *abs(df["num_shares"])), 2)
+    df["total_outgoing_in_eur"] = (df["share_cost_in_$"]/df["exchange_rate"]) + df["fixed_transaction_fee"] + df["variable_transaction_fee"]
+    df["share_cost_in_eur"] = df["total_outgoing_in_eur"]-  df["fixed_transaction_fee"] - df["variable_transaction_fee"] - df["currency_exchange_fee"]
 
-    # define a dictionary to store the scraped data
-    ticker_to_company_map = {}
+    return df
 
-    # iterate through each page
-    for pg_num in tqdm(range(num_pages)):
-        # iteratively scrape each ticker and company name
-        num_tickers_on_page = len(driver.find_elements(By.XPATH, "/html/body/div/div/main/div/div/div[2]/table/tbody/tr"))
-        for i in tqdm(range(1, num_tickers_on_page), leave=False):
-            ticker = driver.find_element(By.XPATH, '/html/body/div/div/main/div/div/div[2]/table/tbody/tr[{}]/td[1]/a'.format(i)).text
-            company_name = driver.find_element(By.XPATH, '/html/body/div/div/main/div/div/div[2]/table/tbody/tr[{}]/td[2]'.format(i)).text
-            ticker_to_company_map[ticker] = company_name
 
-        if pg_num != num_pages - 1:
-            # Change to the next page
-            next_page_button = driver.find_element(By.XPATH, '/html/body/div/div/main/div/div/nav/button[2]')
-            next_page_button.click()
+def add_post_transaction_summary(df):
+    num_shares_to_date = df["num_shares"].cumsum()
+    avg_exchange_rate_to_date = df[["num_shares","exchange_rate"]].cumprod(axis=1)["exchange_rate"].cumsum() / num_shares_to_date
 
-    # store this scraped data as json file
-    with open('data/ticker_to_name.json', 'w') as file:
-        json.dump(ticker_to_company_map, file)
+    fees_paid_to_date = (df["currency_exchange_fee"] + df["fixed_transaction_fee"] + df["variable_transaction_fee"]).cumsum()
+    avg_fees_per_share = (fees_paid_to_date * avg_exchange_rate_to_date) / num_shares_to_date
+
+    total_share_cost_to_date = df[["num_shares","share_price"]].cumprod(axis=1)["share_price"].cumsum()
+    avg_share_cost_to_date = total_share_cost_to_date / num_shares_to_date
+
+    bep = avg_share_cost_to_date + avg_fees_per_share
+
+    df["total_shares_to_date"] = num_shares_to_date
+    df["break_even_price"] = bep
+
+    return df
+
+
+def add_aggregate_price_columns(df):
+
+    # Ensure the table is sorted by ticker and then by date
+    df.sort_values(["stock_ticker", "date"], inplace=True, ignore_index=True)
+
+    # Get a list of the stock tickers and their respective exchanges in this df
+    unique_tickers_list = list(df["stock_ticker"].drop_duplicates())
+    exchanges_list = [str(min(df[df["stock_ticker"] == ticker]["exchange_ticker"]))[:10] for ticker in unique_tickers_list]
+    
+    # iterate through each stock ticker and add the columns to this stocks data
+    df_with_agg_cols = pd.DataFrame()
+    for stock_ticker, exchange_ticker in zip(unique_tickers_list, exchanges_list):
+        # Get this stocks data from the df
+        stocks_data = get_specific_stock(df, stock_ticker, exchange_ticker)
+        # Add the relevant columns
+        stocks_data_w_cols = add_columns_to_data(stocks_data)
+        stocks_data_w_cols = add_post_transaction_summary(stocks_data_w_cols)
+
+        # Append this new df with the aggregate columns to a df of all the stocks data with these cols
+        df_with_agg_cols = pd.concat([df_with_agg_cols, stocks_data_w_cols], axis=0, ignore_index=True)
+        
+    return df_with_agg_cols
 
 
 def create_table_of_historic_stock_prices(ticker_list, start_date_list):

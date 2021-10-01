@@ -6,53 +6,6 @@ from datetime import datetime
 from dateutil.parser import parse
 
 
-def add_columns_to_data(df):#, exchange_currencies):
-    #if exchange_currencies_currencies["exchange_ticker"] = "USD":
-    #    p_curr = "$"
-    
-    df["share_cost_in_$"] = df["num_shares"] * df["share_price"]
-    df["currency_exchange_fee"] = [abs(v) for v in df["share_cost_in_$"] * 0.001]/df["exchange_rate"]
-    df["fixed_transaction_fee"] = 0.5
-    df["variable_transaction_fee"] = round(((0.004/df["exchange_rate"]) *abs(df["num_shares"])), 2)
-    df["total_outgoing_in_eur"] = (df["share_cost_in_$"]/df["exchange_rate"]) + df["fixed_transaction_fee"] + df["variable_transaction_fee"]
-    df["share_cost_in_eur"] = df["total_outgoing_in_eur"]-  df["fixed_transaction_fee"] - df["variable_transaction_fee"] - df["currency_exchange_fee"]
-
-    return df
-
-
-def add_post_transaction_summary(df):
-    num_shares_to_date = df["num_shares"].cumsum()
-    avg_exchange_rate_to_date = df[["num_shares","exchange_rate"]].cumprod(axis=1)["exchange_rate"].cumsum() / num_shares_to_date
-
-    fees_paid_to_date = (df["currency_exchange_fee"] + df["fixed_transaction_fee"] + df["variable_transaction_fee"]).cumsum()
-    avg_fees_per_share = (fees_paid_to_date * avg_exchange_rate_to_date) / num_shares_to_date
-
-    total_share_cost_to_date = df[["num_shares","share_price"]].cumprod(axis=1)["share_price"].cumsum()
-    avg_share_cost_to_date = total_share_cost_to_date / num_shares_to_date
-
-    bep = avg_share_cost_to_date + avg_fees_per_share
-
-    df["total_shares_to_date"] = num_shares_to_date
-    df["break_even_price"] = bep
-
-    return df
-
-
-def get_specific_stock(all_data, stock_ticker, exchange_ticker):
-    """
-    Extract from the transactions dataframe only the transactions which are associated with the given ticker
-
-    Returns:
-        Pandas Dataframe
-    """
-
-    stock_data = all_data[(all_data["stock_ticker"] == stock_ticker) & (all_data["exchange_ticker"] == exchange_ticker)].reset_index(drop=True)
-    stock_data = add_columns_to_data(stock_data)
-    stock_data = add_post_transaction_summary(stock_data)
-
-    return stock_data
-
-
 def get_exchange_rate(date, base_currency, currency):
     all_rates = pd.read_csv("data/{}_currency_exchange_data.csv".format(base_currency))
     all_rates["date"] = [d.date() for d in pd.to_datetime(all_rates["date"])]
