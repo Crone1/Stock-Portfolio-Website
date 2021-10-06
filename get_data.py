@@ -68,6 +68,9 @@ def create_company_ticker_to_name_map():
     with open('data/ticker_to_name.json', 'w') as file:
         json.dump(ticker_to_company_map, file)
 
+    # close the chrome window
+    driver.close()
+
 
 def create_exchange_ticker_to_name_map():
     pass
@@ -136,11 +139,11 @@ def add_columns_to_data(df):#, exchange_currencies):
     #if exchange_currencies_currencies["exchange_ticker"] = "USD":
     #    p_curr = "$"
     
-    df["share_cost_in_local_currency$"] = df["num_shares"] * df["share_price"]
+    df["share_cost_in_local_currency"] = df["num_shares"] * df["share_price"]
     df["currency_exchange_fee"] = [abs(v) for v in df["share_cost_in_local_currency"] * 0.001]/df["exchange_rate"]
     df["fixed_transaction_fee"] = 0.5
     df["variable_transaction_fee"] = round(((0.004/df["exchange_rate"]) *abs(df["num_shares"])), 2)
-    df["total_outgoing_in_eur"] = (df["share_cost_in_local_currency$"]/df["exchange_rate"]) + df["fixed_transaction_fee"] + df["variable_transaction_fee"]
+    df["total_outgoing_in_eur"] = (df["share_cost_in_local_currency"]/df["exchange_rate"]) + df["fixed_transaction_fee"] + df["variable_transaction_fee"]
     df["share_cost_in_eur"] = df["total_outgoing_in_eur"]-  df["fixed_transaction_fee"] - df["variable_transaction_fee"] - df["currency_exchange_fee"]
 
     return df
