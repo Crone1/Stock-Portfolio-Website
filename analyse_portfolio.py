@@ -6,24 +6,74 @@ from datetime import datetime
 from dateutil.parser import parse
 
 
+def col_to_date(col):
+    return [d.date() for d in pd.to_datetime(col)]
+
+
 def get_exchange_rate(date, base_currency, currency):
-    all_rates = pd.read_csv("data/{}_currency_exchange_data.csv".format(base_currency))
-    all_rates["date"] = [d.date() for d in pd.to_datetime(all_rates["date"])]
-    return float(all_rates[all_rates["date"] == date][currency])
+
+    # read in the exchange rate data
+    scraped_rates = pd.read_csv("data/{}_currency_exchange_data.csv".format(base_currency))
+
+    # Turn the date column to a date and set it as the index
+    scraped_rates["date"] = col_to_date(scraped_rates["date"])
+    scraped_rates.set_index("date", inplace=True)
+
+    # Fill in weekend values if they are missing
+    df_with_all_days = scraped_rates.reindex([d.date() for d in pd.date_range(start=min(scraped_rates.index), end=max(scraped_rates.index))])
+    all_rates = df_with_all_days.fillna(method='ffill')
+
+    # Return the rate for the currency on the date we're looking for
+    return float(all_rates.loc[date, currency])
+
+
+def plot_exchange_rates(base_currency):
+
+    # read in the exchange data
+    currency_rates_df = pd.read_csv("data/{}_currency_exchange_data.csv".format(base_currency))
+
+    # ensure the date column is stored as a date
+    currency_rates_df["date"] = col_to_date(currency_rates_df["date"])
+
+    # plot the data
+    num_plots = len(currency_rates_df.columns) - 1
+    currency_rates_df.plot(x="date", subplots=True, figsize=(16, num_plots * 3), layout=(num_plots+1//2, 2), xlabel="Date", title="Exchange Rate to {} Over Time".format(base_currency), rot=90)
 
 
 def get_price(date, ticker):
-    all_prices = pd.read_csv("data/stock_price_data.csv")
-    all_prices["date"] = [d.date() for d in pd.to_datetime(all_prices["date"])]
-    return float(all_prices[all_prices["date"] == date][ticker])
+
+    # read in the stock price data
+    scraped_prices = pd.read_csv("data/stock_price_data.csv")
+
+    # Turn the date column to a date and set it as the index
+    scraped_prices["date"] = col_to_date(scraped_prices["date"])
+    scraped_prices.set_index("date", inplace=True)
+
+    # Fill in weekend values if they are missing
+    df_with_all_days = scraped_prices.reindex([d.date() for d in pd.date_range(start=min(scraped_prices.index), end=max(scraped_prices.index))])
+    all_prices = df_with_all_days.fillna(method='ffill')
+
+    # Return the price for the stock on the date we're looking for
+    return float(all_prices.loc[date, ticker])
 
 
-def create_valuation_table(df, selected_period, base_currency):
-    """
-    """
+def plot_stock_prices():
 
-    tickers_in_df = df["stock_ticker"].drop_duplicates()
-    currencies_in_df = df["currency"].drop_duplicates()
+    # read in the exchange data
+    stock_price_df = pd.read_csv("data/stock_price_data.csv")
+
+    # ensure the date column is stored as a date
+    stock_price_df["date"] = col_to_date(stock_price_df["date"])
+
+    # plot the data
+    num_plots = len(stock_price_df.columns) - 1
+    stock_price_df.plot(x="date", subplots=True, figsize=(16, num_plots * 3), layout=(num_plots+1//2, 2), xlabel="Date", title="Stock Prices Over Time", rot=90)
+
+
+def create_valuation_table(stock_df, selected_period, base_currency):
+
+    tickers_in_df = stock_df["stock_ticker"].drop_duplicates()
+    currencies_in_df = stock_df["currency"].drop_duplicates()
     if len(tickers_in_df) == 1 and len(currencies_in_df) == 1:
         ticker = tickers_in_df[0]
         currency = currencies_in_df[0]
@@ -33,14 +83,14 @@ def create_valuation_table(df, selected_period, base_currency):
     # initialise the dates
     current_date = datetime.now().date()
     prev_val_date = parse("1900-01-01").date()
-    valuation_date = parse(str(df.loc[0, "date"])).date()
-    df["date"] = [d.date() for d in pd.to_datetime(df["date"])]
+    valuation_date = parse(str(stock_df.loc[0, "date"])).date()
+    stock_df["date"] = col_to_date(stock_df["date"])
 
     # initialise the other variables
     shares_owned, total_spent_in_eur, total_fees_paid = 0, 0, 0
 
     # iteratively valuate the shares
-    valuation_df = pd.DataFrame(columns=["date", "share_price", "exchange_rate", "num_shares_owned", "valuation", "price_paid", "adjusted_bep", "total_fees_paid", "absolute_profit", "percent_profit", "percent_fees"])
+    valuation_df = pd.DataFrame(columns=["date", "share_price", "exchange_rate", "num_shares_owned", "current_valuation_{}".format(base_currency), "price_paid_{}".format(base_currency), "adjusted_bep", "total_fees_paid", "absolute_profit", "percent_profit", "percent_fees"])
     while valuation_date <= current_date:
 
         # scrape the values associated with this exact date
@@ -48,10 +98,11 @@ def create_valuation_table(df, selected_period, base_currency):
         exchange_rate = get_exchange_rate(valuation_date, base_currency, currency)
 
         # define the main valuation table columns
-        df_up_to_date = df[(df["date"] > prev_val_date) & (df["date"] <= valuation_date)]
+        df_up_to_date = stock_df[(stock_df["date"] > prev_val_date) & (stock_df["date"] <= valuation_date)]
+
         shares_owned += sum(df_up_to_date["num_shares"])
         total_spent_in_eur += sum(df_up_to_date["total_outgoing_in_eur"])
-        total_fees_paid += sum(df_up_to_date[["currency_exchange_fee", "fixed_transaction_fee", "variable_transaction_fee"]])
+        total_fees_paid += sum(df_up_to_date["currency_exchange_fee"]) + sum(df_up_to_date["fixed_transaction_fee"]) + sum(df_up_to_date["variable_transaction_fee"])
 
         # define the aggregate columns based on these values
         value_at_date = (share_price * shares_owned) / exchange_rate
@@ -64,19 +115,20 @@ def create_valuation_table(df, selected_period, base_currency):
 
         # store these column values in a dataframe row
         valuation_df = valuation_df.append({"date": valuation_date,
-                                             "share_price": share_price,
-                                             "exchange_rate": exchange_rate,
-                                             "num_shares_owned": shares_owned,
-                                             "valuation": value_at_date,
-                                             "price_paid": total_spent_in_eur,
-                                             "adjusted_bep": exchange_rate_adjusted_bep,
-                                             "total_fees_paid": total_fees_paid,
-                                             "absolute_profit": absolute_profit,
-                                             "percent_profit": perc_profit,
-                                             "percent_fees":perc_fees
-                                            }, ignore_index=True).reset_index(drop=True)
+                                            "share_price": share_price,
+                                            "exchange_rate": exchange_rate,
+                                            "num_shares_owned": shares_owned,
+                                            "current_valuation_{}".format(base_currency): value_at_date,
+                                            "price_paid_{}".format(base_currency): total_spent_in_eur,
+                                            "adjusted_bep": exchange_rate_adjusted_bep,
+                                            "total_fees_paid": total_fees_paid,
+                                            "absolute_profit": absolute_profit,
+                                            "percent_profit": perc_profit,
+                                            "percent_fees":perc_fees
+                                           }, ignore_index=True).reset_index(drop=True)
 
-        # increment the valuation date
+        # increment the dates
+        prev_val_date = valuation_date
         valuation_date += selected_period
 
     return valuation_df
