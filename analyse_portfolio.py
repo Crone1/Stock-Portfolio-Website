@@ -2,8 +2,12 @@
 # general packages
 import pandas as pd
 import numpy as np
+from tqdm.auto import tqdm
 from datetime import datetime
 from dateutil.parser import parse
+
+# For selecting period of valuation table
+from dateutil.relativedelta import relativedelta
 
 
 def col_to_date(col):
@@ -70,8 +74,23 @@ def plot_stock_prices():
     stock_price_df.plot(x="date", subplots=True, figsize=(16, num_plots * 3), layout=(num_plots+1//2, 2), xlabel="Date", title="Stock Prices Over Time", rot=90)
 
 
-def create_valuation_table(stock_df, selected_period, base_currency):
+def get_period(period_str):
 
+    period_dict = {"daily": relativedelta(days=1),
+                   "weekly": relativedelta(weeks=1),
+                   "monthly": relativedelta(months=1),
+                   "quarterly": relativedelta(months=3),
+                   "yearly": relativedelta(years=1),
+                  }
+    return period_dict[period_str]
+
+
+def create_valuation_table_for_specific_stock(stock_df, selected_period_str, base_currency):
+
+    # Get the valuation period
+    selected_period = get_period(selected_period_str)
+
+    # Verify that there is only one stock ticker and exchange present in this data
     tickers_in_df = stock_df["stock_ticker"].drop_duplicates()
     currencies_in_df = stock_df["currency"].drop_duplicates()
     if len(tickers_in_df) == 1 and len(currencies_in_df) == 1:
@@ -91,11 +110,20 @@ def create_valuation_table(stock_df, selected_period, base_currency):
 
     # iteratively valuate the shares
     valuation_df = pd.DataFrame(columns=["date", "share_price", "exchange_rate", "num_shares_owned", "current_valuation_{}".format(base_currency), "price_paid_{}".format(base_currency), "adjusted_bep", "total_fees_paid", "absolute_profit", "percent_profit", "percent_fees"])
+    utcnow = datetime.utcnow()
+    pbar = tqdm(total=(current_date - valuation_date)//(utcnow + selected_period - utcnow), leave=False)
     while valuation_date <= current_date:
 
-        # scrape the values associated with this exact date
-        share_price = get_price(valuation_date, ticker)
-        exchange_rate = get_exchange_rate(valuation_date, base_currency, currency)
+        try:
+            # scrape the values for this stock associated with this exact date
+            share_price = get_price(valuation_date, ticker)
+            exchange_rate = get_exchange_rate(valuation_date, base_currency, currency)
+
+        except KeyError:
+            # remove the progress bar and continue to raise the error
+            pbar.reset(total=0)
+            pbar.close()
+            raise KeyError
 
         # define the main valuation table columns
         df_up_to_date = stock_df[(stock_df["date"] > prev_val_date) & (stock_df["date"] <= valuation_date)]
@@ -130,7 +158,46 @@ def create_valuation_table(stock_df, selected_period, base_currency):
         # increment the dates
         prev_val_date = valuation_date
         valuation_date += selected_period
+        pbar.update(1)
+    pbar.close()
 
     return valuation_df
 
+
+def get_specific_stock(all_data, stock_ticker, exchange_ticker):
+    """
+    Extract from the dataframe only the data which are associated with the given ticker
+
+    Returns:
+        Pandas Dataframe
+    """
+
+    return all_data[(all_data["stock_ticker"] == stock_ticker) & (all_data["exchange_ticker"] == exchange_ticker)].reset_index(drop=True)
+
+
+def create_all_valuation_tables(transactions, base_currency, val_period):
+
+    # Define a list of the primary keys to each stock
+    stock_primary_keys = transactions[["stock_ticker", "exchange_ticker"]].drop_duplicates()
+
+    # Iterate through each stock and create a valuation table for it
+    val_tables_map = {}
+    pbar = tqdm(total=len(stock_primary_keys))
+    for index, (stock_ticker, exchange_ticker) in stock_primary_keys.iterrows():
+        try:
+            # Retrieve this stocks transaction data
+            stock_data = get_specific_stock(transactions, stock_ticker, exchange_ticker)
+            
+            # Create a valuation table for this data
+            val_table = create_valuation_table_for_specific_stock(stock_data, val_period, base_currency)
+
+        except KeyError:
+            print("Error with ticker: '{}' ({}). No valuation table calculated for this stock!".format(stock_ticker, exchange_ticker))
+            val_table = None
+
+        # Store a dictionary mapping the keys to the stocks valuation tables
+        val_tables_map[(stock_ticker, exchange_ticker)] = val_table
+        pbar.update(1)
+
+    return val_tables_map
 

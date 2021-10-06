@@ -124,17 +124,6 @@ def create_exchange_name_nd_curency_cols_using_ticker(df):
     return df_with_name
 
 
-def get_specific_stock(all_data, stock_ticker, exchange_ticker):
-    """
-    Extract from the dataframe only the data which are associated with the given ticker
-
-    Returns:
-        Pandas Dataframe
-    """
-
-    return all_data[(all_data["stock_ticker"] == stock_ticker) & (all_data["exchange_ticker"] == exchange_ticker)].reset_index(drop=True)
-
-
 def add_columns_to_data(df):#, exchange_currencies):
     #if exchange_currencies_currencies["exchange_ticker"] = "USD":
     #    p_curr = "$"
