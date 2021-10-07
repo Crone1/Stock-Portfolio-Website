@@ -3,6 +3,7 @@
 import pandas as pd
 import numpy as np
 from tqdm.auto import tqdm
+import datetime as dt
 from datetime import datetime
 from dateutil.parser import parse
 
@@ -100,9 +101,12 @@ def create_valuation_table_for_specific_stock(stock_df, selected_period_str, bas
         raise Exception('Error! Got multiple ticker symbols in the passed table')
 
     # initialise the dates
-    current_date = datetime.now().date()
+    now_datetime = datetime.now()
+    max_valuation_date = now_datetime.date() if now_datetime.time() > dt.time(18,0,0) else now_datetime.date() - relativedelta(days=1)
     prev_val_date = parse("1900-01-01").date()
     valuation_date = parse(str(stock_df.loc[0, "date"])).date()
+
+    # Ensure the date column is stored as a date tyoe
     stock_df["date"] = col_to_date(stock_df["date"])
 
     # initialise the other variables
@@ -110,9 +114,8 @@ def create_valuation_table_for_specific_stock(stock_df, selected_period_str, bas
 
     # iteratively valuate the shares
     valuation_df = pd.DataFrame(columns=["date", "share_price", "exchange_rate", "num_shares_owned", "current_valuation_{}".format(base_currency), "price_paid_{}".format(base_currency), "adjusted_bep", "total_fees_paid", "absolute_profit", "percent_profit", "percent_fees"])
-    utcnow = datetime.utcnow()
-    pbar = tqdm(total=(current_date - valuation_date)//(utcnow + selected_period - utcnow), leave=False)
-    while valuation_date <= current_date:
+    pbar = tqdm(total=(max_valuation_date - valuation_date)//(now_datetime + selected_period - now_datetime), leave=False)
+    while valuation_date <= max_valuation_date:
 
         try:
             # scrape the values for this stock associated with this exact date
@@ -192,7 +195,7 @@ def create_all_valuation_tables(transactions, base_currency, val_period):
             val_table = create_valuation_table_for_specific_stock(stock_data, val_period, base_currency)
 
         except KeyError:
-            print("Error with ticker: '{}' ({}). No valuation table calculated for this stock!".format(stock_ticker, exchange_ticker))
+            print("Error retrieving stock price for ticker: '{}' ({}). No valuation table calculated for this stock!".format(stock_ticker, exchange_ticker))
             val_table = None
 
         # Store a dictionary mapping the keys to the stocks valuation tables

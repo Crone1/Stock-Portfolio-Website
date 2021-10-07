@@ -156,6 +156,17 @@ def add_post_transaction_summary(df):
     return df
 
 
+def get_specific_stock(all_data, stock_ticker, exchange_ticker):
+    """
+    Extract from the dataframe only the data which are associated with the given ticker
+
+    Returns:
+        Pandas Dataframe
+    """
+
+    return all_data[(all_data["stock_ticker"] == stock_ticker) & (all_data["exchange_ticker"] == exchange_ticker)].reset_index(drop=True)
+
+    
 def add_aggregate_price_columns(df):
 
     # Ensure the table is sorted by ticker and then by date
