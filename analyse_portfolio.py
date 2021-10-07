@@ -10,6 +10,9 @@ from dateutil.parser import parse
 # For selecting period of valuation table
 from dateutil.relativedelta import relativedelta
 
+# For plottimng the data
+import matplotlib.pyplot as plt
+
 
 def col_to_date(col):
     return [d.date() for d in pd.to_datetime(col)]
@@ -196,7 +199,7 @@ def create_all_valuation_tables(transactions, base_currency, val_period):
 
         except KeyError:
             print("Error retrieving stock price for ticker: '{}' ({}). No valuation table calculated for this stock!".format(stock_ticker, exchange_ticker))
-            val_table = None
+            val_table = pd.DataFrame()
 
         # Store a dictionary mapping the keys to the stocks valuation tables
         val_tables_map[(stock_ticker, exchange_ticker)] = val_table
@@ -204,3 +207,33 @@ def create_all_valuation_tables(transactions, base_currency, val_period):
 
     return val_tables_map
 
+
+def visualise_profit_over_time(map_stock_to_val_table):
+
+    # Find how many stocks there are to visualise
+    num_tabs = 0
+    for k,v in map_stock_to_val_table.items():
+        num_tabs += 1 if not v.empty else 0
+
+    # Define the figure for plotting
+    fig, ax = plt.subplots(figsize=(16, num_tabs * 3), nrows=(num_tabs+1)//2, ncols=2, gridspec_kw={"hspace":0.35})
+
+    # Iterate through these valuation tables and plot them
+    i = 0
+    for (stock_ticker, exchange_ticker), val_table in map_stock_to_val_table.items():
+
+        # Remove stocks without a valuation table
+        if val_table.empty:
+            continue
+
+        # Plot the stocks profit over time
+        col = i % 2
+        row = i//2
+        ax[row, col].plot(val_table["date"], val_table["absolute_profit"])
+        ax[row, col].set_title("{} ({})".format(stock_ticker, exchange_ticker))
+        ax[row, col].set_ylabel("Profit", fontsize=10)
+        ax[row, col].tick_params(labelrotation=90)
+        i += 1
+    
+    # Add a title to the figure
+    fig.suptitle("Profit Over Time for Stocks", fontsize=20)
