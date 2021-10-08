@@ -45,7 +45,13 @@ def plot_exchange_rates(base_currency):
 
     # plot the data
     num_plots = len(currency_rates_df.columns) - 1
-    currency_rates_df.plot(x="date", subplots=True, figsize=(16, num_plots * 3), layout=(num_plots+1//2, 2), xlabel="Date", title="Exchange Rate to {} Over Time".format(base_currency), rot=90)
+    num_rows = (num_plots+1)//2
+    axes = currency_rates_df.plot(x="date", subplots=True, figsize=(16, num_plots * 2), layout=(num_rows, 2), xlabel="Date", rot=90)
+
+    # Set figure title
+    fig = plt.gcf()
+    fig.suptitle("Exchange Rate to {} Over Time".format(base_currency), fontsize=25)
+    fig.subplots_adjust(top=0.836 + (num_rows * 0.014))
 
 
 def get_price(date, ticker):
@@ -75,7 +81,13 @@ def plot_stock_prices():
 
     # plot the data
     num_plots = len(stock_price_df.columns) - 1
-    stock_price_df.plot(x="date", subplots=True, figsize=(16, num_plots * 3), layout=(num_plots+1//2, 2), xlabel="Date", title="Stock Prices Over Time", rot=90)
+    num_rows = (num_plots+1)//2
+    axes = stock_price_df.plot(x="date", subplots=True, figsize=(16, num_plots * 2), layout=(num_rows, 2), xlabel="Date", rot=90)
+
+    # Set figure title
+    fig = plt.gcf()
+    fig.suptitle("Stock Prices Over Time", fontsize=25)
+    fig.subplots_adjust(top=0.836 + (num_rows * 0.014))
 
 
 def get_period(period_str):
