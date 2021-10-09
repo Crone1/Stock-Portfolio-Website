@@ -12,6 +12,7 @@ from dateutil.relativedelta import relativedelta
 
 # For plottimng the data
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 
 
 def col_to_date(col):
@@ -229,7 +230,13 @@ def visualise_profit_over_time(map_stock_to_val_table):
 
     # Define the figure for plotting
     num_rows = (num_tabs+1)//2
-    fig, ax = plt.subplots(figsize=(16, num_tabs * 3), nrows=num_rows, ncols=2, gridspec_kw={"hspace":0.35})
+    fig, ax = plt.subplots(figsize=(16, num_tabs * 2), nrows=num_rows, ncols=2, gridspec_kw={"hspace":0.5})
+
+    # Define the format for the y-ticks
+    @ticker.FuncFormatter
+    def major_formatter(val, pos):
+        add_euro = "€{}".format(int(abs(val)))
+        return "-" + add_euro if val < 0 else add_euro
 
     # Iterate through these valuation tables and plot them
     i = 0
@@ -278,8 +285,7 @@ def get_portflio_on_date(map_stock_to_val_table, date_str=str(datetime.now().dat
         try:
             assert len(val_row) == 1
         except:
-            print("The valuation table for stock '{}' ({}) has more than one row for the date '{}'".format(stock_ticker, exchange_ticker, date))
-            raise TableSizeError
+            raise Exception("The valuation table for stock '{}' ({}) has more than one row for the date '{}'".format(stock_ticker, exchange_ticker, date))
 
         # Populate a dict with the values for this stock on the selected date
         old_columns = list(val_row.columns)
@@ -290,6 +296,9 @@ def get_portflio_on_date(map_stock_to_val_table, date_str=str(datetime.now().dat
         # Add this row to the full dataframe
         portfolio_on_date = pd.concat([portfolio_on_date, ordered_val_row], axis=0)
 
+    if portfolio_on_date.empty:
+        raise ValueError("Choose a new date - No valuation was calculated for the given date '{}'".format(date))
+
     return portfolio_on_date
 
 
@@ -299,7 +308,7 @@ def visualise_portfolio_pie_chart(portfolio_df, base_currency):
     labels = portfolio_df[["stock_ticker", "exchange_ticker"]].apply(lambda x: "{} ({})".format(x["stock_ticker"], x["exchange_ticker"]), axis=1)
 
     # Define a figure to plot on
-    fig, ax = plt.subplots(figsize=(16, 16), nrows=1, ncols=2)
+    fig, ax = plt.subplots(figsize=(16, 16), nrows=1, ncols=2, gridspec_kw={"wspace":0.45})
 
     # set the colour cycle to use in the pie charts
     colormap = ['b', 'g', 'r', 'c', 'm', 'y', 'darkorange', 'grey', 'lime', 'cornflowerblue', 'lightcoral', 'khaki', 'violet', 'yellow', 'sandybrown', 'deepskyblue', 'deeppink', 'honeydew', 'lightsteelblue', 'blueviolet']
@@ -310,11 +319,11 @@ def visualise_portfolio_pie_chart(portfolio_df, base_currency):
     # Plot a pie chart of the portolio breakdown based on the where I paid the money in
     paid_col = portfolio_df["price_paid_{}".format(base_currency)]
     ax[0].pie(x=paid_col, labels=labels, autopct='%.1f%%', radius=1.1, pctdistance=1.1, labeldistance=1.2, rotatelabels=True)
-    ax[0].set_title("Where I Allocated Money", fontsize=20)
+    ax[0].set_title("Where I Allocated Money", fontsize=20, pad=75)
 
     # Plot a pie chart of the portolio breakdown based on the stocks current value
     val_col = portfolio_df["current_valuation_{}".format(base_currency)]
     percent_lost = 1 - (sum(val_col)/sum(paid_col))
     ax[1].pie(x=val_col, labels=labels, autopct='%.1f%%', radius=1.1 * (1 - percent_lost/2), pctdistance=1.1, labeldistance=1.2, rotatelabels=True)
-    ax[1].set_title('Current Value ({:.2f}% of amount paid)'.format(1 - percent_lost), fontsize=20)
+    ax[1].set_title('Current Value ({:.2f}% of amount paid)'.format(100*(1 - percent_lost)), fontsize=20, pad=75)
 
