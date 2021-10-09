@@ -228,7 +228,8 @@ def visualise_profit_over_time(map_stock_to_val_table):
         num_tabs += 1 if not v.empty else 0
 
     # Define the figure for plotting
-    fig, ax = plt.subplots(figsize=(16, num_tabs * 3), nrows=(num_tabs+1)//2, ncols=2, gridspec_kw={"hspace":0.35})
+    num_rows = (num_tabs+1)//2
+    fig, ax = plt.subplots(figsize=(16, num_tabs * 3), nrows=num_rows, ncols=2, gridspec_kw={"hspace":0.35})
 
     # Iterate through these valuation tables and plot them
     i = 0
@@ -249,3 +250,71 @@ def visualise_profit_over_time(map_stock_to_val_table):
     
     # Add a title to the figure
     fig.suptitle("Profit Over Time for Stocks", fontsize=20)
+    fig.subplots_adjust(top=0.836 + (num_rows * 0.014))
+
+
+def get_portflio_on_date(map_stock_to_val_table, date_str=str(datetime.now().date())):
+    
+    # turn the date string to a date
+    if str(datetime.now().date()) == date_str:
+        print("Analysing portfolio for today -", date_str)
+    date = datetime.strptime(date_str, "%Y-%m-%d").date()
+
+    # create a table of the stock values for this day
+    portfolio_on_date = pd.DataFrame()
+    for (stock_ticker, exchange_ticker), val_tab in map_stock_to_val_table.items():
+        # Remove entries with no valuation table at all
+        if val_tab.empty:
+            continue
+
+        # Find the data associated with the selected date
+        val_row = val_tab[val_tab["date"] == date]
+
+        # Remove entries where there was no data for the selected date
+        if val_row.empty:
+            continue
+
+        # Ensure the table only has one row
+        try:
+            assert len(val_row) == 1
+        except:
+            print("The valuation table for stock '{}' ({}) has more than one row for the date '{}'".format(stock_ticker, exchange_ticker, date))
+            raise TableSizeError
+
+        # Populate a dict with the values for this stock on the selected date
+        old_columns = list(val_row.columns)
+        val_row["stock_ticker"] = stock_ticker
+        val_row["exchange_ticker"] = exchange_ticker
+        ordered_val_row = val_row[["stock_ticker", "exchange_ticker"] + old_columns].reset_index(drop=True)
+
+        # Add this row to the full dataframe
+        portfolio_on_date = pd.concat([portfolio_on_date, ordered_val_row], axis=0)
+
+    return portfolio_on_date
+
+
+def visualise_portfolio_pie_chart(portfolio_df, base_currency):
+
+    # Define the labels to name the components in the pie chart
+    labels = portfolio_df[["stock_ticker", "exchange_ticker"]].apply(lambda x: "{} ({})".format(x["stock_ticker"], x["exchange_ticker"]), axis=1)
+
+    # Define a figure to plot on
+    fig, ax = plt.subplots(figsize=(16, 16), nrows=1, ncols=2)
+
+    # set the colour cycle to use in the pie charts
+    colormap = ['b', 'g', 'r', 'c', 'm', 'y', 'darkorange', 'grey', 'lime', 'cornflowerblue', 'lightcoral', 'khaki', 'violet', 'yellow', 'sandybrown', 'deepskyblue', 'deeppink', 'honeydew', 'lightsteelblue', 'blueviolet']
+
+    ax[0].set_prop_cycle('color', colormap[:len(portfolio_df)]) #plt.cm.Paired(np.linspace(0,1,len(portfolio_df))))
+    ax[1].set_prop_cycle('color', colormap[:len(portfolio_df)])
+
+    # Plot a pie chart of the portolio breakdown based on the where I paid the money in
+    paid_col = portfolio_df["price_paid_{}".format(base_currency)]
+    ax[0].pie(x=paid_col, labels=labels, autopct='%.1f%%', radius=1.1, pctdistance=1.1, labeldistance=1.2, rotatelabels=True)
+    ax[0].set_title("Where I Allocated Money", fontsize=20)
+
+    # Plot a pie chart of the portolio breakdown based on the stocks current value
+    val_col = portfolio_df["current_valuation_{}".format(base_currency)]
+    percent_lost = 1 - (sum(val_col)/sum(paid_col))
+    ax[1].pie(x=val_col, labels=labels, autopct='%.1f%%', radius=1.1 * (1 - percent_lost/2), pctdistance=1.1, labeldistance=1.2, rotatelabels=True)
+    ax[1].set_title('Current Value ({:.2f}% of amount paid)'.format(1 - percent_lost), fontsize=20)
+
