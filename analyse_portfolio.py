@@ -6,6 +6,7 @@ from tqdm.auto import tqdm
 import datetime as dt
 from datetime import datetime
 from dateutil.parser import parse
+import os
 
 # For selecting period of valuation table
 from dateutil.relativedelta import relativedelta
@@ -13,6 +14,11 @@ from dateutil.relativedelta import relativedelta
 # For plottimng the data
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
+
+# For sending automatic email
+import smtplib, ssl
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 
 def col_to_date(col):
@@ -327,3 +333,31 @@ def visualise_portfolio_pie_chart(portfolio_df, base_currency):
     ax[1].pie(x=val_col, labels=labels, autopct='%.1f%%', radius=1.1 * (1 - percent_lost/2), pctdistance=1.1, labeldistance=1.2, rotatelabels=True)
     ax[1].set_title('Current Value ({:.2f}% of amount paid)'.format(100*(1 - percent_lost)), fontsize=20, pad=75)
 
+
+def send_portfolio_update_from_gmail_account(reciever_email, html_message):
+
+    # Define the variables to connect to gmail's servers
+    smtp_server = 'smtp.gmail.com'
+    port_no = 465
+    context = ssl.create_default_context()
+
+    # Define the sender's email address and the get it's password
+    sender_email = 'portfolio.updater@gmail.com'
+    sender_email_password = os.environ.get('PORTFOLIO_UPDATE_EMAIL_PASSWORD')
+
+    # Setup the structure of the email
+    message = MIMEMultipart("alternative")
+    message["Subject"] = "Portfolio Update - {}".format(datetime.today().date())
+    message["From"] = sender_email
+    message["To"] = reciever_email
+
+    # Attach this HTML message to the email
+    text = MIMEText(html_message, "html")
+    message.attach(text)
+
+    # Login to the email and send the message
+    with smtplib.SMTP_SSL(smtp_server, port_no, context=context) as server:
+        server.login(sender_email, sender_email_password)
+        server.sendmail(sender_email, reciever_email, message.as_string())
+    
+    return "Email Sent Successfully"
