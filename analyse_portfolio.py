@@ -17,10 +17,11 @@ import matplotlib.ticker as ticker
 
 # For sending automatic email
 import smtplib, ssl
+from pretty_html_table import build_table
 from email.mime.application import MIMEApplication
-from email.mime.image import MIMEImage
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from tabulate import tabulate
 
 
 def col_to_date(col):
@@ -313,7 +314,7 @@ def get_portflio_on_date(map_stock_to_val_table, date_str=str(datetime.now().dat
     if portfolio_on_date.empty:
         raise ValueError("Choose a new date - No valuation was calculated for the given date '{}'".format(date))
 
-    return portfolio_on_date
+    return portfolio_on_date.reset_index(drop=True)
 
 
 def visualise_portfolio_pie_chart(portfolio_df, base_currency):
@@ -343,6 +344,11 @@ def visualise_portfolio_pie_chart(portfolio_df, base_currency):
 
     # Save the figure as a png
     plt.savefig("saved_figures/portfolio_pie_chart.png")
+
+
+def format_portfolio_df(portfolio_df, base_currency):
+
+    return portfolio_df
 
 
 def create_portfolio_image_attachments_for_email():
@@ -375,7 +381,7 @@ def create_portfolio_image_attachments_for_email():
     return attachment_list
 
 
-def send_portfolio_update_from_gmail_account(reciever_email):
+def send_portfolio_update_from_gmail_account(reciever_email, portfolio_df):
 
     # Define the variables to connect to gmail's servers
     smtp_server = 'smtp.gmail.com'
@@ -393,16 +399,18 @@ def send_portfolio_update_from_gmail_account(reciever_email):
     message["To"] = reciever_email
 
     # Define the HTML message
-    html_message = """\
+    html_message_p1 = """\
     <html>
       <body>
         <p>Hi,<br>
            <br>
-           Just a quick email to give you your weekly portfolio update.<br>
+           Just a quick email to give you another regular portfolio update.<br>
            <br>
            We have attached images showing where your portfolio is currently valued and how it has performed over time.<br>
-           The following table contains a summary of each stock in more detail:
-           {}
+           The following table contains a summary of each stock in more detail:<br>
+           """
+    html_table = build_table(portfolio_df, font_size="medium", text_align="center", index=False, color='blue_light')
+    html_message_p2 = """\
            <br>
            Regards,<br>
            Portman<br>
@@ -410,9 +418,10 @@ def send_portfolio_update_from_gmail_account(reciever_email):
       </body>
     </html>
     """
+    full_html_message = html_message_p1 + html_table + html_message_p2
 
     # Attach this HTML message to the email
-    text = MIMEText(html_message, "html")
+    text = MIMEText(full_html_message, "html")
     message.attach(text)
 
     # Attach the png portfolio images to the email
