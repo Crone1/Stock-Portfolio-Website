@@ -17,6 +17,8 @@ import matplotlib.ticker as ticker
 
 # For sending automatic email
 import smtplib, ssl
+from email.mime.application import MIMEApplication
+from email.mime.image import MIMEImage
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
@@ -60,6 +62,9 @@ def plot_exchange_rates(base_currency):
     fig.suptitle("Exchange Rate to {} Over Time".format(base_currency), fontsize=25)
     fig.subplots_adjust(top=0.836 + (num_rows * 0.014))
 
+    # Save the figure as a png
+    plt.savefig("saved_figures/all_exchange_rates.png")
+
 
 def get_price(date, ticker):
 
@@ -95,6 +100,9 @@ def plot_stock_prices():
     fig = plt.gcf()
     fig.suptitle("Stock Prices Over Time", fontsize=25)
     fig.subplots_adjust(top=0.836 + (num_rows * 0.014))
+
+    # Save the figure as a png
+    plt.savefig("saved_figures/all_stock_prices.png")
 
 
 def get_period(period_str):
@@ -333,8 +341,41 @@ def visualise_portfolio_pie_chart(portfolio_df, base_currency):
     ax[1].pie(x=val_col, labels=labels, autopct='%.1f%%', radius=1.1 * (1 - percent_lost/2), pctdistance=1.1, labeldistance=1.2, rotatelabels=True)
     ax[1].set_title('Current Value ({:.2f}% of amount paid)'.format(100*(1 - percent_lost)), fontsize=20, pad=75)
 
+    # Save the figure as a png
+    plt.savefig("saved_figures/portfolio_pie_chart.png")
 
-def send_portfolio_update_from_gmail_account(reciever_email, html_message):
+
+def create_portfolio_image_attachments_for_email():
+
+    # Define the loctions of where the attachments are
+    exchange_rate_filename = "saved_figures/all_exchange_rates.png"
+    stock_prices_filename = "saved_figures/all_stock_prices.png"
+    stock_profit_over_time_filename = "saved_figures/all_stock_profit_over_time.png"
+    portfolio_pie_chart_filename = "saved_figures/portfolio_pie_chart.png"
+
+    # Iterate through each and create a valid attachment
+    filename_list = [exchange_rate_filename, stock_prices_filename, stock_profit_over_time_filename, portfolio_pie_chart_filename]
+    attachment_list = []
+    for filename in filename_list:
+
+        # Remove the directories from the filename
+        name = filename.split("/")[-1]
+
+        # Open PDF file in binary mode
+        with open(filename, "rb") as file:
+            # Add file as application/octet-stream - Email client can download this automatically as an attachment
+            attachment = MIMEApplication(file.read())
+
+        # Add header as key/value pair to attachment part
+        attachment.add_header("Content-Disposition", "attachment", filename=name)
+
+        # Add the attachment to the list of all attachments
+        attachment_list.append(attachment)
+
+    return attachment_list
+
+
+def send_portfolio_update_from_gmail_account(reciever_email):
 
     # Define the variables to connect to gmail's servers
     smtp_server = 'smtp.gmail.com'
@@ -346,14 +387,38 @@ def send_portfolio_update_from_gmail_account(reciever_email, html_message):
     sender_email_password = os.environ.get('PORTFOLIO_UPDATE_EMAIL_PASSWORD')
 
     # Setup the structure of the email
-    message = MIMEMultipart("alternative")
+    message = MIMEMultipart("mixed")
     message["Subject"] = "Portfolio Update - {}".format(datetime.today().date())
     message["From"] = sender_email
     message["To"] = reciever_email
 
+    # Define the HTML message
+    html_message = """\
+    <html>
+      <body>
+        <p>Hi,<br>
+           <br>
+           Just a quick email to give you your weekly portfolio update.<br>
+           <br>
+           We have attached images showing where your portfolio is currently valued and how it has performed over time.<br>
+           The following table contains a summary of each stock in more detail:
+           {}
+           <br>
+           Regards,<br>
+           Portman<br>
+        </p>
+      </body>
+    </html>
+    """
+
     # Attach this HTML message to the email
     text = MIMEText(html_message, "html")
     message.attach(text)
+
+    # Attach the png portfolio images to the email
+    attachment_list = create_portfolio_image_attachments_for_email()
+    for attachment in attachment_list:
+        message.attach(attachment)
 
     # Login to the email and send the message
     with smtplib.SMTP_SSL(smtp_server, port_no, context=context) as server:
