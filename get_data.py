@@ -2,6 +2,7 @@
 # general packages
 from tqdm.auto import tqdm
 import pandas as pd
+import os
 
 # For loading the config
 import yaml
@@ -76,15 +77,134 @@ def create_exchange_ticker_to_name_map():
     pass
 
 
-def read_in_raw_transactions_data():
+def update_unique_currency_list(transactions, currency_list):
+    
+    # Get a list of the unique currencies
+    unique_currencies = list(transactions["currency"].drop_duplicates())
+
+    # Iterate through these unique currency and update the list
+    for currency in unique_currencies:
+        if currency not in currency_list:
+            currency_list.append(currency)
+
+    return currency_list
+
+
+def update_ticker_date_map(transactions, ticker_date_map):
+
+    # Get a list of the unique tickers
+    unique_tickers = transactions[["stock_ticker", "exchange_ticker"]].drop_duplicates()
+    unique_stock_tickers = list(unique_tickers["stock_ticker"])
+    unique_exchange_tickers = list(unique_tickers["exchange_ticker"])
+
+    # Get a list of the date when this ticker first appeared
+    ticker_start_dates = [str(min(transactions[(transactions["stock_ticker"] == stock) & (transactions["exchange_ticker"] == exchange)]["date"]))[:10] for stock, exchange in zip(unique_stock_tickers, unique_exchange_tickers)]
+
+    # Iterate through these unique value and update the ticker map
+    for date, stock, exchange in zip(ticker_start_dates, unique_stock_tickers, unique_exchange_tickers):
+
+        # Update the map of tickers to date by looking for the minimum date it appeared
+        ticker_key = (stock, exchange)
+        if ticker_key in ticker_date_map:
+            if date < ticker_date_map[ticker_key]:
+                ticker_date_map[ticker_key] = date
+        else:
+            ticker_date_map[ticker_key] = date
+
+    return ticker_date_map
+
+
+def extract_unique_stock_and_currency_values_from_all_transactions():
+
+    # Iterate through each transactions data
+    transactions_dir = "data/user_transactions"
+    ticker_date_map, currency_list = {}, []
+    for username in [filename[:-len("_transactions.csv")] for filename in os.listdir(transactions_dir)]:
+        # read in the transactions data
+        raw_transactions = read_in_raw_transactions_data(username)
+
+        # Add the currency column to this data
+        transactions = create_exchange_name_nd_curency_cols_using_ticker(raw_transactions)
+
+        # Update the dictionaries to find the minimum date when the ticker/currency appeared
+        ticker_date_map = update_ticker_date_map(transactions, ticker_date_map)
+        currency_list = update_unique_currency_list(transactions, currency_list)
+
+    return ticker_date_map, currency_list
+
+
+def read_in_raw_transactions_data(username):
 
     # Read in the transactions table
-    transactions = pd.read_csv("data/transactions.csv")
+    transactions = pd.read_csv("data/user_transactions/{}_transactions.csv".format(username))
 
     # Ensure the date column is a datetime oject
     transactions['date'] = pd.to_datetime(transactions['date'])
 
     return transactions
+
+
+
+def create_table_of_historic_stock_prices(ticker_to_date_map):
+
+    stock_prices_df = pd.DataFrame()
+    stock_dividend_df = pd.DataFrame()
+    for (stock_ticker, exchange_ticker), start_date in ticker_to_date_map.items():
+        
+        try:
+            # get the close price & dividend info for each stock_ticker
+            ticker_yf_object = yf.Ticker(stock_ticker)
+            ticker_hist = ticker_yf_object.history(start=start_date)
+            price_df = ticker_hist[["Close"]].rename(columns={"Close": stock_ticker})
+            price_df.index.rename("date", inplace=True)
+            dividend_df = ticker_hist[["Dividends"]].rename(columns={"Dividends": stock_ticker})
+            dividend_df.index.rename("date", inplace=True)
+
+            # add this price & dividend data to a dataframe for all tickers
+            stock_prices_df = pd.concat([stock_prices_df, price_df], join="outer", axis=1)
+            stock_dividend_df = pd.concat([stock_dividend_df, dividend_df], join="outer", axis=1)
+
+        except:
+            print(stock_ticker, "not found")
+
+    # store this data as a CSV
+    stock_prices_df.to_csv("data/stock_price_data.csv", index=True)
+    stock_dividend_df.to_csv("data/stock_dividend_data.csv", index=True)
+
+
+def create_exchange_rate_to_date_map(base_currency, exchange_currency_list, start_date):
+
+    # Define the main variables needed to scrape the exchange rates
+    base_url = 'https://api.exchangerate.host/timeseries?'
+    target_currecies = ','.join(exchange_currency_list)
+    end_date = datetime.now().date()
+    currency_rates_df = pd.DataFrame()
+
+    while True:
+        # define the URL to query
+        query = base_url + f'start_date={start_date}&end_date={end_date}&base={base_currency}&symbols={target_currecies}'
+
+        # Query the URL for the currency data
+        url_response = requests.get(query).json()
+
+        # Store the currency exchange rates in a dataframe
+        if url_response["success"]:
+            response_df = pd.DataFrame(url_response["rates"]).T
+            response_df.index = pd.to_datetime(response_df.index)
+            currency_rates_df = pd.concat([currency_rates_df, response_df], axis=0)
+        else:
+            print("ERROR when scraping exchange rates:\n", url_response)
+
+        # Exit the loop if the last day scraped is the same as the specified end_date
+        last_date_scraped = max(currency_rates_df.index)
+        if last_date_scraped == end_date:
+            break
+        else:
+            start_date = last_date_scraped + timedelta(days=1)
+
+    # store this data as a CSV
+    currency_rates_df.index.rename("date", inplace=True)
+    currency_rates_df.to_csv("data/{}_currency_exchange_data.csv".format(base_currency), index=True)
 
 
 def create_company_name_col_using_ticker(df):
@@ -93,7 +213,7 @@ def create_company_name_col_using_ticker(df):
     df.drop(columns=["company_name"], inplace=True, errors="ignore")
 
     # Add a company name column to the datafram using the defined json file
-    with open('data/stock_ticker_to_name.json', 'r') as file:
+    with open('../data/stock_ticker_to_name.json', 'r') as file:
         comp_name_map = json.load(file)
         df["company_name"] = [comp_name_map[ticker] if ticker in comp_name_map else "" for ticker in df["stock_ticker"]]
 
@@ -189,68 +309,6 @@ def add_aggregate_price_columns(df):
         df_with_agg_cols = pd.concat([df_with_agg_cols, stocks_data_w_cols], axis=0, ignore_index=True)
         
     return df_with_agg_cols
-
-
-def create_table_of_historic_stock_prices(ticker_list, start_date_list):
-
-    stock_prices_df = pd.DataFrame()
-    stock_dividend_df = pd.DataFrame()
-    for ticker, start_date in zip(ticker_list, start_date_list):
-        
-        try:
-            # get the close price & dividend info for each ticker
-            ticker_yf_object = yf.Ticker(ticker)
-            ticker_hist = ticker_yf_object.history(start=start_date)
-            price_df = ticker_hist[["Close"]].rename(columns={"Close": ticker})
-            price_df.index.rename("date", inplace=True)
-            dividend_df = ticker_hist[["Dividends"]].rename(columns={"Dividends": ticker})
-            dividend_df.index.rename("date", inplace=True)
-
-            # add this price & dividend data to a dataframe for all tickers
-            stock_prices_df = pd.concat([stock_prices_df, price_df], join="outer", axis=1)
-            stock_dividend_df = pd.concat([stock_dividend_df, dividend_df], join="outer", axis=1)
-
-        except:
-            print(ticker, "not found")
-
-    # store this data as a CSV
-    stock_prices_df.to_csv("data/stock_price_data.csv", index=True)
-    stock_dividend_df.to_csv("data/stock_dividend_data.csv", index=True)
-
-
-def create_exchange_rate_to_date_map(base_currency, exchange_currency_list, start_date):
-
-    # Define the main variables needed to scrape the exchange rates
-    base_url = 'https://api.exchangerate.host/timeseries?'
-    target_currecies = ','.join(exchange_currency_list)
-    end_date = datetime.now().date()
-    currency_rates_df = pd.DataFrame()
-
-    while True:
-        # define the URL to query
-        query = base_url + f'start_date={start_date}&end_date={end_date}&base={base_currency}&symbols={target_currecies}'
-
-        # Query the URL for the currency data
-        url_response = requests.get(query).json()
-
-        # Store the currency exchange rates in a dataframe
-        if url_response["success"]:
-            response_df = pd.DataFrame(url_response["rates"]).T
-            response_df.index = pd.to_datetime(response_df.index)
-            currency_rates_df = pd.concat([currency_rates_df, response_df], axis=0)
-        else:
-            print("ERROR when scraping exchange rates:\n", url_response)
-
-        # Exit the loop if the last day scraped is the same as the specified end_date
-        last_date_scraped = max(currency_rates_df.index)
-        if last_date_scraped == end_date:
-            break
-        else:
-            start_date = last_date_scraped + timedelta(days=1)
-
-    # store this data as a CSV
-    currency_rates_df.index.rename("date", inplace=True)
-    currency_rates_df.to_csv("data/{}_currency_exchange_data.csv".format(base_currency), index=True)
 
 
 def calculate_amount_in_cumulative_account_each_day():
