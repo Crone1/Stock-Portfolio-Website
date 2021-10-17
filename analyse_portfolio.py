@@ -28,30 +28,51 @@ def col_to_date(col):
     return [d.date() for d in pd.to_datetime(col)]
 
 
-def get_exchange_rate(date, base_currency, currency):
-
-    # read in the exchange rate data
-    scraped_rates = pd.read_csv("data/{}_currency_exchange_data.csv".format(base_currency))
-
-    # Turn the date column to a date and set it as the index
-    scraped_rates["date"] = col_to_date(scraped_rates["date"])
-    scraped_rates.set_index("date", inplace=True)
-
-    # Fill in weekend values if they are missing
-    df_with_all_days = scraped_rates.reindex([d.date() for d in pd.date_range(start=min(scraped_rates.index), end=max(scraped_rates.index))])
-    all_rates = df_with_all_days.fillna(method='ffill')
-
-    # Return the rate for the currency on the date we're looking for
-    return float(all_rates.loc[date, currency])
-
-
-def plot_exchange_rates(base_currency):
+def plot_stock_prices(transactions_df):
 
     # read in the exchange data
-    currency_rates_df = pd.read_csv("data/{}_currency_exchange_data.csv".format(base_currency))
+    all_stock_prices_df = pd.read_csv("data/stock_price_data.csv")
 
     # ensure the date column is stored as a date
-    currency_rates_df["date"] = col_to_date(currency_rates_df["date"])
+    all_stock_prices_df["date"] = col_to_date(all_stock_prices_df["date"])
+
+    # Get a subset of the stocks specific to the transactions df
+    unique_tickers = transactions_df[["stock_ticker", "exchange_ticker"]].drop_duplicates()
+    unique_stock_tickers = list(unique_tickers["stock_ticker"])
+    unique_exchange_tickers = list(unique_tickers["exchange_ticker"])
+    plot_cols = []
+    for col in all_stock_prices_df.drop(columns=["date"]).columns:
+        col_stock_ticker, col_exchange_ticker = col.rstrip(")").split(" (")
+        for unique_stock_ticker, unique_exchange_ticker in zip(unique_stock_tickers, unique_exchange_tickers):
+            if (col_stock_ticker == unique_stock_ticker) and (col_exchange_ticker == unique_exchange_ticker):
+                plot_cols.append(col)
+    stock_price_df = all_stock_prices_df[["date"] + plot_cols]
+
+    # plot the data
+    num_plots = len(stock_price_df.columns) - 1
+    num_rows = (num_plots+1)//2
+    axes = stock_price_df.plot(x="date", subplots=True, figsize=(16, num_plots * 2), layout=(num_rows, 2), xlabel="Date", rot=90)
+
+    # Set figure title
+    fig = plt.gcf()
+    fig.suptitle("Stock Prices Over Time", fontsize=25)
+    fig.subplots_adjust(top=0.836 + (num_rows * 0.014))
+
+    # Save the figure as a png
+    plt.savefig("saved_figures/all_stock_prices.png")
+
+
+def plot_exchange_rates(transactions_df, base_currency):
+
+    # read in the exchange data
+    all_currency_rates_df = pd.read_csv("data/{}_currency_exchange_data.csv".format(base_currency))
+
+    # ensure the date column is stored as a date
+    all_currency_rates_df["date"] = col_to_date(all_currency_rates_df["date"])
+
+    # Get a subset of the stocks specific to the transactions df
+    unique_currencies = list(transactions_df["currency"].drop_duplicates())
+    currency_rates_df = all_currency_rates_df[["date"] + unique_currencies]
 
     # plot the data
     num_plots = len(currency_rates_df.columns) - 1
@@ -67,7 +88,7 @@ def plot_exchange_rates(base_currency):
     plt.savefig("saved_figures/all_exchange_rates.png")
 
 
-def get_price(date, ticker):
+def get_stock_price(date, stock_ticker, exchange_ticker):
 
     # read in the stock price data
     scraped_prices = pd.read_csv("data/stock_price_data.csv")
@@ -77,33 +98,32 @@ def get_price(date, ticker):
     scraped_prices.set_index("date", inplace=True)
 
     # Fill in weekend values if they are missing
-    df_with_all_days = scraped_prices.reindex([d.date() for d in pd.date_range(start=min(scraped_prices.index), end=max(scraped_prices.index))])
+
+    df_with_all_days = scraped_prices.reindex([d.date() for d in pd.date_range(start=min(scraped_prices.index), end=datetime.today().date())])
     all_prices = df_with_all_days.fillna(method='ffill')
+
+    # Get combined ticker
+    ticker = "{} ({})".format(stock_ticker, exchange_ticker)
 
     # Return the price for the stock on the date we're looking for
     return float(all_prices.loc[date, ticker])
 
 
-def plot_stock_prices():
+def get_exchange_rate(date, base_currency, currency):
 
-    # read in the exchange data
-    stock_price_df = pd.read_csv("data/stock_price_data.csv")
+    # read in the exchange rate data
+    scraped_rates = pd.read_csv("data/{}_currency_exchange_data.csv".format(base_currency))
 
-    # ensure the date column is stored as a date
-    stock_price_df["date"] = col_to_date(stock_price_df["date"])
+    # Turn the date column to a date and set it as the index
+    scraped_rates["date"] = col_to_date(scraped_rates["date"])
+    scraped_rates.set_index("date", inplace=True)
 
-    # plot the data
-    num_plots = len(stock_price_df.columns) - 1
-    num_rows = (num_plots+1)//2
-    axes = stock_price_df.plot(x="date", subplots=True, figsize=(16, num_plots * 2), layout=(num_rows, 2), xlabel="Date", rot=90)
+    # Fill in weekend values if they are missing
+    df_with_all_days = scraped_rates.reindex([d.date() for d in pd.date_range(start=min(scraped_rates.index), end=max(scraped_rates.index))])
+    all_rates = df_with_all_days.fillna(method='ffill')
 
-    # Set figure title
-    fig = plt.gcf()
-    fig.suptitle("Stock Prices Over Time", fontsize=25)
-    fig.subplots_adjust(top=0.836 + (num_rows * 0.014))
-
-    # Save the figure as a png
-    plt.savefig("saved_figures/all_stock_prices.png")
+    # Return the rate for the currency on the date we're looking for
+    return float(all_rates.loc[date, currency])
 
 
 def get_period(period_str):
@@ -123,13 +143,14 @@ def create_valuation_table_for_specific_stock(stock_df, selected_period_str, bas
     selected_period = get_period(selected_period_str)
 
     # Verify that there is only one stock ticker and exchange present in this data
-    tickers_in_df = stock_df["stock_ticker"].drop_duplicates()
+    tickers_in_df = stock_df[["stock_ticker", "exchange_ticker"]].drop_duplicates()
     currencies_in_df = stock_df["currency"].drop_duplicates()
     if len(tickers_in_df) == 1 and len(currencies_in_df) == 1:
-        ticker = tickers_in_df[0]
+        stock_ticker = tickers_in_df.loc[0, "stock_ticker"]
+        exchange_ticker = tickers_in_df.loc[0, "exchange_ticker"]
         currency = currencies_in_df[0]
     else:
-        raise Exception('Error! Got multiple ticker symbols in the passed table')
+        raise ValueError('Error! Got multiple ticker symbols in the passed table')
 
     # initialise the dates
     now_datetime = datetime.now()
@@ -150,7 +171,7 @@ def create_valuation_table_for_specific_stock(stock_df, selected_period_str, bas
 
         try:
             # scrape the values for this stock associated with this exact date
-            share_price = get_price(valuation_date, ticker)
+            share_price = get_stock_price(valuation_date, stock_ticker, exchange_ticker)
             exchange_rate = get_exchange_rate(valuation_date, base_currency, currency)
 
         except KeyError:
@@ -186,7 +207,7 @@ def create_valuation_table_for_specific_stock(stock_df, selected_period_str, bas
                                             "total_fees_paid": total_fees_paid,
                                             "absolute_profit": absolute_profit,
                                             "percent_profit": perc_profit,
-                                            "percent_fees":perc_fees
+                                            "percent_fees": perc_fees,
                                            }, ignore_index=True).reset_index(drop=True)
 
         # increment the dates
@@ -209,7 +230,7 @@ def get_specific_stock(all_data, stock_ticker, exchange_ticker):
     return all_data[(all_data["stock_ticker"] == stock_ticker) & (all_data["exchange_ticker"] == exchange_ticker)].reset_index(drop=True)
 
 
-def create_all_valuation_tables(transactions, base_currency, val_period):
+def create_all_valuation_tables(transactions, base_currency, val_period="daily"):
 
     # Define a list of the primary keys to each stock
     stock_primary_keys = transactions[["stock_ticker", "exchange_ticker"]].drop_duplicates()

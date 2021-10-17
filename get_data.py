@@ -163,7 +163,7 @@ def create_table_of_historic_stock_prices(ticker_to_date_map):
             # get the close price & dividend info for each stock_ticker
             ticker_yf_object = yf.Ticker(stock_ticker)
             ticker_hist = ticker_yf_object.history(start=start_date)
-            price_df = ticker_hist[["Close"]].rename(columns={"Close": stock_ticker})
+            price_df = ticker_hist[["Close"]].rename(columns={"Close": "{} ({})".format(stock_ticker, exchange_ticker)})
             price_df.index.rename("date", inplace=True)
             dividend_df = ticker_hist[["Dividends"]].rename(columns={"Dividends": stock_ticker})
             dividend_df.index.rename("date", inplace=True)
@@ -319,10 +319,10 @@ def add_aggregate_price_columns(df):
     return df_with_agg_cols
 
 
-def calculate_amount_in_cumulative_account_each_day():
+def calculate_amount_in_cumulative_account_each_day(username):
 
     # read in the table of when money was deposited and create a table showing the balance changes
-    deposites_df = pd.read_csv("data/deposites.csv", index_col="date")
+    deposites_df = pd.read_csv("data/user_deposites/{}_deposites.csv".format(username), index_col="date")
     balance_changes_df = deposites_df["amount"].cumsum()
 
     # ensure there is only one value for each day
