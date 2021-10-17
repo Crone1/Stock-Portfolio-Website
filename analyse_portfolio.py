@@ -11,7 +11,7 @@ import os
 # For selecting period of valuation table
 from dateutil.relativedelta import relativedelta
 
-# For plottimng the data
+# For plotting the data
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 
@@ -21,7 +21,6 @@ from pretty_html_table import build_table
 from email.mime.application import MIMEApplication
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from tabulate import tabulate
 
 
 def col_to_date(col):
@@ -265,7 +264,7 @@ def create_all_valuation_tables(transactions, base_currency, val_period="daily")
     # Iterate through each stock and create a valuation table for it
     val_tables_map = {}
     pbar = tqdm(total=len(stock_primary_keys))
-    for index, (stock_ticker, exchange_ticker) in stock_primary_keys.iterrows():
+    for _, (stock_ticker, exchange_ticker) in stock_primary_keys.iterrows():
         try:
             # Retrieve this stocks transaction data
             stock_data = get_specific_stock(transactions, stock_ticker, exchange_ticker)
@@ -282,6 +281,40 @@ def create_all_valuation_tables(transactions, base_currency, val_period="daily")
         pbar.update(1)
 
     return val_tables_map
+
+
+def plot_background_colours(axis, min_val, max_val):
+
+    axis_buffer = (max_val - min_val) * 0.05
+    min_to_colour, max_to_colour = min_val-axis_buffer-1, max_val+axis_buffer+1
+    abs_max = max(abs(max_val), abs(min_val))
+    profit_top_cutoff, profit_mid_cutoff, loss_mid_cutoff, loss_bottom_cutoff = abs_max * 0.67, abs_max * 0.33, -abs_max * 0.33, -abs_max * 0.67
+
+    # Plot the different colour bands
+    if min_to_colour < loss_bottom_cutoff:
+        axis.axhspan(min_to_colour, loss_bottom_cutoff, facecolor="darkred", alpha=0.5)
+        axis.axhspan(loss_bottom_cutoff, loss_mid_cutoff, facecolor="red", alpha=0.5)
+        axis.axhspan(loss_mid_cutoff, 0, facecolor="lightcoral", alpha=0.5)
+    elif min_to_colour < loss_mid_cutoff:
+        axis.axhspan(min_to_colour, loss_mid_cutoff, facecolor="red", alpha=0.5)
+        axis.axhspan(loss_mid_cutoff, 0, facecolor="lightcoral", alpha=0.5)
+    elif min_to_colour < 0:
+        axis.axhspan(min_to_colour, 0, facecolor="lightcoral", alpha=0.5)
+    if max_to_colour > profit_top_cutoff:
+        axis.axhspan(profit_top_cutoff, max_to_colour, facecolor="darkgreen", alpha=0.5)
+        axis.axhspan(profit_mid_cutoff, profit_top_cutoff, facecolor="green", alpha=0.5)
+        axis.axhspan(0, profit_mid_cutoff, facecolor="palegreen", alpha=0.5)
+    elif max_to_colour > profit_mid_cutoff:
+        axis.axhspan(profit_mid_cutoff, max_to_colour, facecolor="green", alpha=0.5)
+        axis.axhspan(0, profit_mid_cutoff, facecolor="palegreen", alpha=0.5)
+    elif max_to_colour > 0:
+        axis.axhspan(0, max_to_colour, facecolor="palegreen", alpha=0.5)
+
+    # plot a line at 0 to distinguish profit VS loss
+    axis.axhline(0, color="grey")
+
+    # Set the Y-axis limits
+    axis.set_ylim(bottom=min_val-axis_buffer, top=max_val+axis_buffer)
 
 
 def visualise_profit_over_time(map_stock_to_val_table):
@@ -302,32 +335,41 @@ def visualise_profit_over_time(map_stock_to_val_table):
         return "-" + add_euro if val < 0 else add_euro
 
     # Iterate through these valuation tables and plot them
-    i = 0
-    for (stock_ticker, exchange_ticker), val_table in map_stock_to_val_table.items():
+    for i, ((stock_ticker, exchange_ticker), val_table) in enumerate(map_stock_to_val_table.items()):
 
         # Remove stocks without a valuation table
         if val_table.empty:
             continue
 
-        # Plot the stocks profit over time
+        # Define the axes to plot on 
         col = i % 2
         row = i//2
-        ax[row, col].plot(val_table["date"], val_table["absolute_profit"])
-        ax[row, col].set_title("{} ({})".format(stock_ticker, exchange_ticker))
-        ax[row, col].set_ylabel("Profit", fontsize=10)
-        ax[row, col].tick_params(labelrotation=90)
-        i += 1
+
+        # Plot the background colors
+        min_val, max_val = min(0, min(val_table["absolute_profit"])), max(0, max(val_table["absolute_profit"]))
+        plot_background_colours(ax[row, col], min_val, max_val)
+
+        # Plot the stocks profit over time
+        ax[row, col].plot(val_table["date"], val_table["absolute_profit"], color="black")
+        ax[row, col].set_title("{} ({})".format(stock_ticker, exchange_ticker), fontsize=20)
+        ax[row, col].set_ylabel("Profit", fontsize=15)
+        ax[row, col].tick_params(axis='x', labelrotation=45)
+        ax[row, col].yaxis.set_major_formatter(major_formatter)
+        ax[row, col].set_xlim(left=min(val_table["date"]), right=max(val_table["date"]))
     
     # Add a title to the figure
-    fig.suptitle("Profit Over Time for Stocks", fontsize=20)
+    fig.suptitle("Profit Over Time for Stocks", fontsize=30)
     fig.subplots_adjust(top=0.836 + (num_rows * 0.014))
 
+    # Save the figure as a png
+    plt.savefig("saved_figures/all_stock_profit_over_time.png")
 
-def get_portflio_on_date(map_stock_to_val_table, date_str=str(datetime.now().date())):
-    
+
+def get_portflio_on_date(map_stock_to_val_table, date_str=str(datetime.now().date() - relativedelta(days=1))):
+
     # turn the date string to a date
-    if str(datetime.now().date()) == date_str:
-        print("Analysing portfolio for today -", date_str)
+    if str(datetime.now().date() - relativedelta(days=1)) == date_str:
+        print("Analysing portfolio for yesterday -", date_str)
     date = datetime.strptime(date_str, "%Y-%m-%d").date()
 
     # create a table of the stock values for this day
@@ -429,7 +471,7 @@ def create_portfolio_image_attachments_for_email():
     return attachment_list
 
 
-def send_portfolio_update_from_gmail_account(reciever_email, portfolio_df):
+def send_portfolio_update_from_gmail_account(username, reciever_email, portfolio_df):
 
     # Define the variables to connect to gmail's servers
     smtp_server = 'smtp.gmail.com'
@@ -442,7 +484,7 @@ def send_portfolio_update_from_gmail_account(reciever_email, portfolio_df):
 
     # Setup the structure of the email
     message = MIMEMultipart("mixed")
-    message["Subject"] = "Portfolio Update - {}".format(datetime.today().date())
+    message["Subject"] = "Portfolio Update - {date}".format(date=datetime.today().date() - relativedelta(days=1))
     message["From"] = sender_email
     message["To"] = reciever_email
 
@@ -483,3 +525,4 @@ def send_portfolio_update_from_gmail_account(reciever_email, portfolio_df):
         server.sendmail(sender_email, reciever_email, message.as_string())
     
     return "Email Sent Successfully"
+
