@@ -46,12 +46,26 @@ def plot_stock_prices(transactions_df):
         for unique_stock_ticker, unique_exchange_ticker in zip(unique_stock_tickers, unique_exchange_tickers):
             if (col_stock_ticker == unique_stock_ticker) and (col_exchange_ticker == unique_exchange_ticker):
                 plot_cols.append(col)
-    stock_price_df = all_stock_prices_df[["date"] + plot_cols]
+    subset_stock_price_df = all_stock_prices_df[["date"] + plot_cols]
+
+    # Get a subset of these stock prices to match the dates in the transactions df
+    ticker_start_dates = col_to_date([str(min(transactions_df[(transactions_df["stock_ticker"] == stock) & (transactions_df["exchange_ticker"] == exchange)]["date"]))[:10] for stock, exchange in zip(unique_stock_tickers, unique_exchange_tickers)])
+    stock_price_df = pd.DataFrame()
+    for date, stock_ticker, exchange_ticker in zip(ticker_start_dates, unique_stock_tickers, unique_exchange_tickers):
+        col = "{} ({})".format(stock_ticker, exchange_ticker)
+        # check if the stock is in this stock price df
+        if col not in subset_stock_price_df.columns:
+            print("Cannot create plot for '{}' as it is not in the scraped stock price data".format(col))
+            continue
+        specific_col = subset_stock_price_df[["date", col]]
+        subset_cols_rows = specific_col[specific_col["date"] > date].set_index(["date"])
+        stock_price_df = pd.concat([stock_price_df, subset_cols_rows], axis=1)
+    stock_price_df = stock_price_df.reset_index().rename(columns={"index": "date"})
 
     # plot the data
-    num_plots = len(stock_price_df.columns) - 1
-    num_rows = (num_plots+1)//2
-    axes = stock_price_df.plot(x="date", subplots=True, figsize=(16, num_plots * 2), layout=(num_rows, 2), xlabel="Date", rot=90)
+    plot_titles = list(stock_price_df.drop(columns=["date"]).columns)
+    num_rows = (len(plot_titles)+1)//2
+    axes = stock_price_df.plot(x="date", subplots=True, title=plot_titles, figsize=(16, len(plot_titles) * 2), layout=(num_rows, 2), legend=None, xlabel="Date", rot=90)
 
     # Set figure title
     fig = plt.gcf()
@@ -72,7 +86,20 @@ def plot_exchange_rates(transactions_df, base_currency):
 
     # Get a subset of the stocks specific to the transactions df
     unique_currencies = list(transactions_df["currency"].drop_duplicates())
-    currency_rates_df = all_currency_rates_df[["date"] + unique_currencies]
+    subset_currency_rates_df = all_currency_rates_df[["date"] + unique_currencies]
+
+    # Get a subset of these stock prices to match the dates in the transactions df
+    currency_start_dates = col_to_date([str(min(transactions_df[transactions_df["currency"] == currency]["date"]))[:10] for currency in unique_currencies])
+    currency_rates_df = pd.DataFrame()
+    for date, currency in zip(currency_start_dates, unique_currencies):
+        # check if the stock is in this stock price df
+        if currency not in subset_currency_rates_df.columns:
+            print("Cannot create plot for '{}' as it is not in the scraped exchange rate data".format(currency))
+            continue
+        specific_curr = subset_currency_rates_df[["date", currency]]
+        subset_curr_rows = specific_curr[specific_curr["date"] > date].set_index(["date"])
+        currency_rates_df = pd.concat([currency_rates_df, subset_curr_rows], axis=1)
+    currency_rates_df = currency_rates_df.reset_index().rename(columns={"index": "date"})
 
     # plot the data
     num_plots = len(currency_rates_df.columns) - 1
