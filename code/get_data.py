@@ -25,7 +25,7 @@ from datetime import datetime, timedelta
 import json
 
 # Read in config of my chromedriver location
-with open("configs/config.yaml", "r") as config:
+with open("../configs/config.yaml", "r") as config:
     c = yaml.load(config, Loader=yaml.FullLoader)
 chromedriver_location = c["chromedriver_location"]
 
@@ -74,7 +74,7 @@ def create_company_ticker_to_name_map():
             next_page_button.click()
 
     # store this scraped data as json file
-    with open('data/ticker_to_name.json', 'w') as file:
+    with open('../data/ticker_to_name.json', 'w') as file:
         json.dump(ticker_to_company_map, file)
 
     # close the chrome window
@@ -125,7 +125,7 @@ def update_ticker_date_map(transactions, ticker_date_map):
 def extract_unique_stock_and_currency_values_from_all_transactions():
 
     # Iterate through each transactions data
-    transactions_dir = "data/user_transactions"
+    transactions_dir = "../data/user_transactions"
     ticker_date_map, currency_list = {}, []
     for username in [filename[:-len("_transactions.csv")] for filename in os.listdir(transactions_dir)]:
         # read in the transactions data
@@ -144,7 +144,7 @@ def extract_unique_stock_and_currency_values_from_all_transactions():
 def read_in_raw_transactions_data(username):
 
     # Read in the transactions table
-    transactions = pd.read_csv("data/user_transactions/{}_transactions.csv".format(username))
+    transactions = pd.read_csv("../data/user_transactions/{}_transactions.csv".format(username))
 
     # Ensure the date column is a datetime oject
     transactions['date'] = pd.to_datetime(transactions['date'])
@@ -176,8 +176,8 @@ def create_table_of_historic_stock_prices(ticker_to_date_map):
             print(stock_ticker, "not found")
 
     # store this data as a CSV
-    stock_prices_df.to_csv("data/stock_price_data.csv", index=True)
-    stock_dividend_df.to_csv("data/stock_dividend_data.csv", index=True)
+    stock_prices_df.to_csv("../data/stock_price_data.csv", index=True)
+    stock_dividend_df.to_csv("../data/stock_dividend_data.csv", index=True)
 
 
 def create_exchange_rate_to_date_map(base_currency, exchange_currency_list, start_date):
@@ -212,7 +212,7 @@ def create_exchange_rate_to_date_map(base_currency, exchange_currency_list, star
 
     # store this data as a CSV
     currency_rates_df.index.rename("date", inplace=True)
-    currency_rates_df.to_csv("data/{}_currency_exchange_data.csv".format(base_currency), index=True)
+    currency_rates_df.to_csv("../data/{}_currency_exchange_data.csv".format(base_currency), index=True)
 
 
 def create_company_name_col_using_ticker(df):
@@ -240,7 +240,7 @@ def create_exchange_name_nd_curency_cols_using_ticker(df):
     df.drop(columns=["exchange_name", "currency"], inplace=True, errors="ignore")
 
     # Add an exchange name column to the datafram using the defined CSV
-    exch_tab = pd.read_csv('data/exchange_name_and_currency.csv')
+    exch_tab = pd.read_csv('../data/exchange_name_and_currency.csv')
     df_with_name = df.merge(exch_tab, how='left', on="exchange_ticker")
 
     # Check if any rows didn't have an associated exchange name in thie CSV
@@ -322,7 +322,7 @@ def add_aggregate_price_columns(df):
 def calculate_amount_in_cumulative_account_each_day(username):
 
     # read in the table of when money was deposited and create a table showing the balance changes
-    deposites_df = pd.read_csv("data/user_deposites/{}_deposites.csv".format(username), index_col="date")
+    deposites_df = pd.read_csv("../data/user_deposites/{}_deposites.csv".format(username), index_col="date")
     balance_changes_df = deposites_df["amount"].cumsum()
 
     # ensure there is only one value for each day

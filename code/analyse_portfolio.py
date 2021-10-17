@@ -30,7 +30,7 @@ def col_to_date(col):
 def plot_stock_prices(transactions_df):
 
     # read in the exchange data
-    all_stock_prices_df = pd.read_csv("data/stock_price_data.csv")
+    all_stock_prices_df = pd.read_csv("../data/stock_price_data.csv")
 
     # ensure the date column is stored as a date
     all_stock_prices_df["date"] = col_to_date(all_stock_prices_df["date"])
@@ -72,13 +72,13 @@ def plot_stock_prices(transactions_df):
     fig.subplots_adjust(top=0.836 + (num_rows * 0.014))
 
     # Save the figure as a png
-    plt.savefig("saved_figures/all_stock_prices.png")
+    plt.savefig("../saved_figures/all_stock_prices.png")
 
 
 def plot_exchange_rates(transactions_df, base_currency):
 
     # read in the exchange data
-    all_currency_rates_df = pd.read_csv("data/{}_currency_exchange_data.csv".format(base_currency))
+    all_currency_rates_df = pd.read_csv("../data/{}_currency_exchange_data.csv".format(base_currency))
 
     # ensure the date column is stored as a date
     all_currency_rates_df["date"] = col_to_date(all_currency_rates_df["date"])
@@ -117,7 +117,7 @@ def plot_exchange_rates(transactions_df, base_currency):
 def get_stock_price(date, stock_ticker, exchange_ticker):
 
     # read in the stock price data
-    scraped_prices = pd.read_csv("data/stock_price_data.csv")
+    scraped_prices = pd.read_csv("../data/stock_price_data.csv")
 
     # Turn the date column to a date and set it as the index
     scraped_prices["date"] = col_to_date(scraped_prices["date"])
@@ -138,7 +138,7 @@ def get_stock_price(date, stock_ticker, exchange_ticker):
 def get_exchange_rate(date, base_currency, currency):
 
     # read in the exchange rate data
-    scraped_rates = pd.read_csv("data/{}_currency_exchange_data.csv".format(base_currency))
+    scraped_rates = pd.read_csv("../data/{}_currency_exchange_data.csv".format(base_currency))
 
     # Turn the date column to a date and set it as the index
     scraped_rates["date"] = col_to_date(scraped_rates["date"])
@@ -362,7 +362,7 @@ def visualise_profit_over_time(map_stock_to_val_table):
     fig.subplots_adjust(top=0.836 + (num_rows * 0.014))
 
     # Save the figure as a png
-    plt.savefig("saved_figures/all_stock_profit_over_time.png")
+    plt.savefig("../saved_figures/all_stock_profit_over_time.png")
 
 
 def get_portflio_on_date(map_stock_to_val_table, date_str=str(datetime.now().date() - relativedelta(days=1))):
@@ -433,7 +433,7 @@ def visualise_portfolio_pie_chart(portfolio_df, base_currency):
     ax[1].set_title('Current Value ({:.2f}% of amount paid)'.format(100*(1 - percent_lost)), fontsize=20, pad=75)
 
     # Save the figure as a png
-    plt.savefig("saved_figures/portfolio_pie_chart.png")
+    plt.savefig("../saved_figures/portfolio_pie_chart.png")
 
 
 def format_portfolio_df(portfolio_df, base_currency):
@@ -444,10 +444,10 @@ def format_portfolio_df(portfolio_df, base_currency):
 def create_portfolio_image_attachments_for_email():
 
     # Define the loctions of where the attachments are
-    exchange_rate_filename = "saved_figures/all_exchange_rates.png"
-    stock_prices_filename = "saved_figures/all_stock_prices.png"
-    stock_profit_over_time_filename = "saved_figures/all_stock_profit_over_time.png"
-    portfolio_pie_chart_filename = "saved_figures/portfolio_pie_chart.png"
+    exchange_rate_filename = "../saved_figures/all_exchange_rates.png"
+    stock_prices_filename = "../saved_figures/all_stock_prices.png"
+    stock_profit_over_time_filename = "../saved_figures/all_stock_profit_over_time.png"
+    portfolio_pie_chart_filename = "../saved_figures/portfolio_pie_chart.png"
 
     # Iterate through each and create a valid attachment
     filename_list = [exchange_rate_filename, stock_prices_filename, stock_profit_over_time_filename, portfolio_pie_chart_filename]
