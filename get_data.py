@@ -8,6 +8,8 @@ import os
 import yaml
 
 # For scraping the ticker data
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 import time
@@ -43,6 +45,12 @@ def create_company_ticker_to_name_map():
     driver = webdriver.Chrome(chromedriver_location)
     driver.get(url)
     time.sleep(2)
+
+    # Close the cookies pop-up
+    custom_choices_button = driver.find_element(By.XPATH, '/html/body/div[2]/div/div/div/div[3]/div[2]/div[1]').click()
+    legit_interests_button = driver.find_element(By.XPATH, '/html/body/div[2]/div/div/div/div[1]/div[2]/ul/li[3]').click()
+    object_button = driver.execute_script("arguments[0].click();", WebDriverWait(driver, 20).until(EC.element_to_be_clickable((By.XPATH, '/html/body/div[2]/div/div/div/div[2]/div[3]/div[1]/div[1]/div/label/input'))))
+    save_button = driver.find_element(By.XPATH, '/html/body/div[2]/div/div/div/div[3]/div[2]/div[1]').click()
 
     # check how many pages there are
     pages_text = driver.find_element(By.XPATH, '/html/body/div/div/main/div/div/nav/div/span').text
