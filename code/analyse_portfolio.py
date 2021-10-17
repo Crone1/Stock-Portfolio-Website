@@ -11,6 +11,9 @@ import os
 # For selecting period of valuation table
 from dateutil.relativedelta import relativedelta
 
+# Checking & making directories
+from pathlib import Path
+
 # For plotting the data
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
@@ -27,7 +30,7 @@ def col_to_date(col):
     return [d.date() for d in pd.to_datetime(col)]
 
 
-def plot_stock_prices(transactions_df):
+def plot_stock_prices(username, transactions_df):
 
     # read in the exchange data
     all_stock_prices_df = pd.read_csv("../data/stock_price_data.csv")
@@ -72,10 +75,11 @@ def plot_stock_prices(transactions_df):
     fig.subplots_adjust(top=0.836 + (num_rows * 0.014))
 
     # Save the figure as a png
-    plt.savefig("../saved_figures/all_stock_prices.png")
+    Path("../saved_figures/{}".format(username)).mkdir(parents=True, exist_ok=True)
+    plt.savefig("../saved_figures/{}/all_stock_prices.png".format(username))
 
 
-def plot_exchange_rates(transactions_df, base_currency):
+def plot_exchange_rates(username, transactions_df, base_currency):
 
     # read in the exchange data
     all_currency_rates_df = pd.read_csv("../data/{}_currency_exchange_data.csv".format(base_currency))
@@ -111,7 +115,8 @@ def plot_exchange_rates(transactions_df, base_currency):
     fig.subplots_adjust(top=0.836 + (num_rows * 0.014))
 
     # Save the figure as a png
-    plt.savefig("../saved_figures/all_exchange_rates.png")
+    Path("../saved_figures/{}".format(username)).mkdir(parents=True, exist_ok=True)
+    plt.savefig("../saved_figures/{}/all_exchange_rates.png".format(username))
 
 
 def get_stock_price(date, stock_ticker, exchange_ticker):
@@ -317,7 +322,7 @@ def plot_background_colours(axis, min_val, max_val):
     axis.set_ylim(bottom=min_val-axis_buffer, top=max_val+axis_buffer)
 
 
-def visualise_profit_over_time(map_stock_to_val_table):
+def visualise_profit_over_time(username, map_stock_to_val_table):
 
     # Find how many stocks there are to visualise
     num_tabs = 0
@@ -364,7 +369,8 @@ def visualise_profit_over_time(map_stock_to_val_table):
     fig.subplots_adjust(top=0.836 + (num_rows * 0.014))
 
     # Save the figure as a png
-    plt.savefig("../saved_figures/all_stock_profit_over_time.png")
+    Path("../saved_figures/{}".format(username)).mkdir(parents=True, exist_ok=True)
+    plt.savefig("../saved_figures/{}/all_stock_profit_over_time.png".format(username))
 
 
 def get_portflio_on_date(map_stock_to_val_table, date_str=str(datetime.now().date() - relativedelta(days=1))):
@@ -409,7 +415,7 @@ def get_portflio_on_date(map_stock_to_val_table, date_str=str(datetime.now().dat
     return portfolio_on_date.reset_index(drop=True)
 
 
-def visualise_portfolio_pie_chart(portfolio_df, base_currency):
+def visualise_portfolio_pie_chart(username, portfolio_df, base_currency):
 
     # Define the labels to name the components in the pie chart
     labels = portfolio_df[["stock_ticker", "exchange_ticker"]].apply(lambda x: "{} ({})".format(x["stock_ticker"], x["exchange_ticker"]), axis=1)
@@ -435,7 +441,8 @@ def visualise_portfolio_pie_chart(portfolio_df, base_currency):
     ax[1].set_title('Current Value ({:.2f}% of amount paid)'.format(100*(1 - percent_lost)), fontsize=20, pad=75)
 
     # Save the figure as a png
-    plt.savefig("../saved_figures/portfolio_pie_chart.png")
+    Path("../saved_figures/{}".format(username)).mkdir(parents=True, exist_ok=True)
+    plt.savefig("../saved_figures/{}/portfolio_pie_chart.png".format(username))
 
 
 def format_portfolio_df(portfolio_df, base_currency):
@@ -443,13 +450,13 @@ def format_portfolio_df(portfolio_df, base_currency):
     return portfolio_df
 
 
-def create_portfolio_image_attachments_for_email():
+def create_portfolio_image_attachments_for_email(username):
 
     # Define the loctions of where the attachments are
-    exchange_rate_filename = "../saved_figures/all_exchange_rates.png"
-    stock_prices_filename = "../saved_figures/all_stock_prices.png"
-    stock_profit_over_time_filename = "../saved_figures/all_stock_profit_over_time.png"
-    portfolio_pie_chart_filename = "../saved_figures/portfolio_pie_chart.png"
+    exchange_rate_filename = "../saved_figures/{}/all_exchange_rates.png".format(username)
+    stock_prices_filename = "../saved_figures/{}/all_stock_prices.png".format(username)
+    stock_profit_over_time_filename = "../saved_figures/{}/all_stock_profit_over_time.png".format(username)
+    portfolio_pie_chart_filename = "../saved_figures/{}/portfolio_pie_chart.png".format(username)
 
     # Iterate through each and create a valid attachment
     filename_list = [exchange_rate_filename, stock_prices_filename, stock_profit_over_time_filename, portfolio_pie_chart_filename]
@@ -517,7 +524,7 @@ def send_portfolio_update_from_gmail_account(username, reciever_email, portfolio
     message.attach(text)
 
     # Attach the png portfolio images to the email
-    attachment_list = create_portfolio_image_attachments_for_email()
+    attachment_list = create_portfolio_image_attachments_for_email(username)
     for attachment in attachment_list:
         message.attach(attachment)
 
