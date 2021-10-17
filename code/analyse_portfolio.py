@@ -111,7 +111,7 @@ def plot_exchange_rates(transactions_df, base_currency):
     fig.subplots_adjust(top=0.836 + (num_rows * 0.014))
 
     # Save the figure as a png
-    plt.savefig("saved_figures/all_exchange_rates.png")
+    plt.savefig("../saved_figures/all_exchange_rates.png")
 
 
 def get_stock_price(date, stock_ticker, exchange_ticker):
@@ -311,7 +311,7 @@ def plot_background_colours(axis, min_val, max_val):
         axis.axhspan(0, max_to_colour, facecolor="palegreen", alpha=0.5)
 
     # plot a line at 0 to distinguish profit VS loss
-    axis.axhline(0, color="grey")
+    axis.axhline(0, color="white", linewidth=3)
 
     # Set the Y-axis limits
     axis.set_ylim(bottom=min_val-axis_buffer, top=max_val+axis_buffer)
@@ -335,7 +335,8 @@ def visualise_profit_over_time(map_stock_to_val_table):
         return "-" + add_euro if val < 0 else add_euro
 
     # Iterate through these valuation tables and plot them
-    for i, ((stock_ticker, exchange_ticker), val_table) in enumerate(map_stock_to_val_table.items()):
+    i = 0
+    for (stock_ticker, exchange_ticker), val_table in map_stock_to_val_table.items():
 
         # Remove stocks without a valuation table
         if val_table.empty:
@@ -344,6 +345,7 @@ def visualise_profit_over_time(map_stock_to_val_table):
         # Define the axes to plot on 
         col = i % 2
         row = i//2
+        i += 1
 
         # Plot the background colors
         min_val, max_val = min(0, min(val_table["absolute_profit"])), max(0, max(val_table["absolute_profit"]))
